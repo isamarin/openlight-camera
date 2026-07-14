@@ -34,4 +34,16 @@ openlight/co/touchstrip/TouchStrip.java:
 openlight/co/camera/utils/Util.java:
 	fixed — shared_pref_update migration; removed dead catch (phase 0)
 
+openlight/co/camera/managers/capture/CaptureManager.java:
+	fixed — migrated from smali (phase 2); Provider method refs
+
+openlight/co/camera/managers/capture/CaptureBurstManager.java:
+	fixed — migrated from smali (phase 2); enum switch inlined
+
+openlight/co/camera/managers/focus/FocusManager.java:
+	fixed — migrated from smali (phase 2)
+
+openlight/co/camera/managers/focus/SmartAFTriggerMgr.java:
+	fixed — migrated from smali (phase 2); KeyAction switch inlined
+
 # Still smali-only on critical path — see scripts/smali-debt.txt

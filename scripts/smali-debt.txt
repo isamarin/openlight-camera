@@ -9,9 +9,6 @@ openlight/co/camera/ImagePreviewFragment.smali
 openlight/co/camera/VideoFragment.smali
 
 ## Capture pipeline
-openlight/co/camera/managers/capture/CaptureManager.smali
-openlight/co/camera/managers/focus/FocusManager.smali
-openlight/co/camera/managers/focus/SmartAFTriggerMgr.smali
 openlight/co/camera/managers/autoexposure/AutoExposureManager.smali
 openlight/co/camera/managers/capturerequest/CaptureRequestManager.smali
 openlight/co/camera/managers/zoom/ZoomManager.smali
@@ -22,6 +19,6 @@ openlight/co/lightsdk/**
 co/openlight/lightprocessingservice/**
 
 ## Next migration targets (highest impact)
-# 1. CaptureManager + FocusManager
-# 2. ImageReaderManager
-# 3. BasePreviewFragment / ImagePreviewFragment
+# 1. ImageReaderManager
+# 2. BasePreviewFragment / ImagePreviewFragment
+# 3. AutoExposureManager + CaptureRequestManager + ZoomManager
