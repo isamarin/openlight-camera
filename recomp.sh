@@ -3,7 +3,7 @@ set -euo pipefail
 
 IMAGE="openlight-decomp-tools:latest"
 DOCKERFILE="${DOCKERFILE:-docker/Dockerfile}"
-ENTRYPOINT="${DOCKERFILE:-docker/entrypoint.sh}"
+ENTRYPOINT="${ENTRYPOINT:-docker/entrypoint.sh}"
 STAMP_FILE=".docker-build-stamp"
 
 die() { echo "Error: $*" >&2; exit 1; }
@@ -66,7 +66,7 @@ else
   fi
 fi
 
-DOCKER_FLAGS=(--rm --privileged -e UID="$(id -u)" -e GID="$(id -g)" -v "$PWD":/repo -w /workspace)
-[[ $INTERACTIVE -eq 1 ]] && DOCKER_FLAGS+=(-it)
+DOCKER_FLAGS=(--rm --entrypoint bash -v "$PWD":/workspace -w /workspace)
+[[ $INTERACTIVE -eq 1 ]] && DOCKER_FLAGS+=(--privileged -it -e UID="$(id -u)" -e GID="$(id -g)" -v "$PWD":/repo)
 
 docker run "${DOCKER_FLAGS[@]}" "$IMAGE" "${CMD[@]}"

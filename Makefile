@@ -69,8 +69,12 @@ $(OUTPUT_NAME): $(STAGE3_BUILDDIR)
 version:
 	bash .github/scripts/calver.sh
 
+.PHONY: check-smali
+check-smali:
+	bash scripts/check-orphan-smali.sh
+
 .PHONY: apk
-apk: $(OUTPUT_NAME)
+apk: check-smali $(OUTPUT_NAME)
 
 .PHONY: install
 install: apk-signed

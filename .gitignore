@@ -19,3 +19,4 @@ files.txt
 
 .env
 .docker-build-stamp
+/.idea/

@@ -1,0 +1,27 @@
+# Smali-only critical path (not yet migrated to src/)
+# ~810 files remain in light_camera/smali/
+
+## Application shell
+openlight/co/camera/CameraApp.smali
+openlight/co/camera/BaseActivity.smali
+openlight/co/camera/BasePreviewFragment.smali
+openlight/co/camera/ImagePreviewFragment.smali
+openlight/co/camera/VideoFragment.smali
+
+## Capture pipeline
+openlight/co/camera/managers/capture/CaptureManager.smali
+openlight/co/camera/managers/focus/FocusManager.smali
+openlight/co/camera/managers/focus/SmartAFTriggerMgr.smali
+openlight/co/camera/managers/autoexposure/AutoExposureManager.smali
+openlight/co/camera/managers/capturerequest/CaptureRequestManager.smali
+openlight/co/camera/managers/zoom/ZoomManager.smali
+openlight/co/camera/ImageReaderManager.smali
+
+## Light platform
+openlight/co/lightsdk/**
+co/openlight/lightprocessingservice/**
+
+## Next migration targets (highest impact)
+# 1. CaptureManager + FocusManager
+# 2. ImageReaderManager
+# 3. BasePreviewFragment / ImagePreviewFragment
