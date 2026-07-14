@@ -46,4 +46,7 @@ openlight/co/camera/managers/focus/FocusManager.java:
 openlight/co/camera/managers/focus/SmartAFTriggerMgr.java:
 	fixed — migrated from smali (phase 2); KeyAction switch inlined
 
+openlight/co/camera/ImageReaderManager.java:
+	fixed — migrated from smali (phase 3); JPEG/RAW/YUV readers, save queue
+
 # Still smali-only on critical path — see scripts/smali-debt.txt

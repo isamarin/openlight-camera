@@ -12,13 +12,12 @@ openlight/co/camera/VideoFragment.smali
 openlight/co/camera/managers/autoexposure/AutoExposureManager.smali
 openlight/co/camera/managers/capturerequest/CaptureRequestManager.smali
 openlight/co/camera/managers/zoom/ZoomManager.smali
-openlight/co/camera/ImageReaderManager.smali
 
 ## Light platform
 openlight/co/lightsdk/**
 co/openlight/lightprocessingservice/**
 
 ## Next migration targets (highest impact)
-# 1. ImageReaderManager
-# 2. BasePreviewFragment / ImagePreviewFragment
-# 3. AutoExposureManager + CaptureRequestManager + ZoomManager
+# 1. BasePreviewFragment / ImagePreviewFragment
+# 2. AutoExposureManager + CaptureRequestManager + ZoomManager
+# 3. CameraApp + BaseActivity
