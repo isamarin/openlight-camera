@@ -271,7 +271,9 @@ public abstract class CameraManager {
                             long frameNumber = result.getFrameNumber();
                             if (frameNumber < 2) {
                                 Range<Integer> fpsRange = (Range<Integer>) result.get(CaptureResult.CONTROL_AE_TARGET_FPS_RANGE);
-                                mFpsRange = fpsRange;
+                                if (fpsRange != null) {
+                                    mFpsRange = fpsRange;
+                                }
                                 CaptureRequestBuilder.setAeTargetFpsRange(mPreviewRequestBuilder, null);
                                 ((CaptureRequestManager) mCaptureReqManager.get()).resetZoom(mPreviewRequestBuilder);
                                 startRepeatingRequestInPreview();
@@ -740,6 +742,7 @@ public abstract class CameraManager {
         mCurrentState = State.OPENING;
         LogUtil.d(TAG, "openCamera");
         if (ContextCompat.checkSelfPermission(CameraApp.get(), "android.permission.CAMERA") != 0) {
+            mCurrentState = State.CLOSED;
             return false;
         }
         MediaFileManager.get().checkLastFileName();
@@ -753,6 +756,12 @@ public abstract class CameraManager {
             String cameraId;
             synchronized (mCameraStateLock) {
                 cameraId = mCameraInfo.getCameraId();
+            }
+            if (cameraId == null) {
+                LogUtil.e(TAG, "No capable camera available");
+                mCameraOpenCloseLock.release();
+                mCurrentState = State.CLOSED;
+                return false;
             }
             LogUtil.d(TAG, "Open Camera in Camera Controller");
             manager.openCamera(cameraId, mStateCallback, mCameraBackgroundHandler);

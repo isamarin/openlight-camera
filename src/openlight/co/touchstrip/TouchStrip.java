@@ -130,25 +130,14 @@ public class TouchStrip {
         return this.mDetector.onTouchEvent(paramMotionEvent);
     }
 
-    public static TouchStrip get(Application var0) {
-        synchronized(TouchStrip.class){}
-  
-        TouchStrip var4;
-        try {
-           if (sInstance == null) {
-              TouchStrip var1 = new TouchStrip();
-              sInstance = var1;
-           }
-  
-           sInstance.updateTouchStripStatus(var0);
-           sInstance.mApplication = var0;
-           var4 = sInstance;
-        } finally {
-           ;
+    public static synchronized TouchStrip get(Application application) {
+        if (sInstance == null) {
+            sInstance = new TouchStrip();
         }
-  
-        return var4;
-     }
+        sInstance.updateTouchStripStatus(application);
+        sInstance.mApplication = application;
+        return sInstance;
+    }
 
     private SharedPreferences getSharedPreferences(Context paramContext) {
         if (this.mCameraSettingsSharedPreferences == null) {

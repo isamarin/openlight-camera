@@ -73,7 +73,7 @@ public class VideoManager extends CameraManager {
                     || what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED) {
                 setCurrentState(State.PREVIEW);
                 stopRecording();
-                mStatusListener.onError(ErrorType.MAX_FILE_SIZE_REACHED);
+                notifyStatusError(ErrorType.MAX_FILE_SIZE_REACHED);
             }
             mCameraMetrics.add("event_media_recorder_info",
                     CameraMetrics.createPropertiesForMediaRecorderInfo(what, extra));
@@ -102,13 +102,19 @@ public class VideoManager extends CameraManager {
         } catch (Exception e) {
             LogUtil.e(TAG, "Fail to continue recording.", e);
             Metrics.get().add("event_media_recorder_start_failed");
-            mStatusListener.onError(ErrorType.VIDEO_RECORD_START_FAILED);
+            notifyStatusError(ErrorType.VIDEO_RECORD_START_FAILED);
             restartCamera();
         }
     }
 
     @Override
     public void createCameraSession(SurfaceTexture surfaceTexture, Size size) {
+        if (mCameraDevice == null) {
+            LogUtil.e(TAG, "Cannot create video session: camera device is null");
+            Metrics.get().add("event_camera_session_error");
+            restartCamera();
+            return;
+        }
         try {
             setCurrentState(State.PREVIEW);
             mSurfaceList.clear();
@@ -136,7 +142,7 @@ public class VideoManager extends CameraManager {
     public void setCurrentState(State state) {
         if (state != mCurrentState) {
             mCurrentState = state;
-            if (state == State.PREVIEW || state == State.RECORDING) {
+            if ((state == State.PREVIEW || state == State.RECORDING) && mStatusListener != null) {
                 mStatusListener.onRecordStatusChange(state);
             }
         }
@@ -163,18 +169,26 @@ public class VideoManager extends CameraManager {
         } catch (IOException | IllegalStateException e) {
             LogUtil.e(TAG, "Fail to start recording.", e);
             Metrics.get().add("event_media_recorder_start_failed");
-            mStatusListener.onError(ErrorType.VIDEO_RECORD_START_FAILED);
+            notifyStatusError(ErrorType.VIDEO_RECORD_START_FAILED);
             restartCamera();
         }
     }
 
     public void stopRecording() {
         LogUtil.d(TAG, "Stop Recording");
+        if (mMediaRecorder == null) {
+            LogUtil.w(TAG, "Stop recording requested but media recorder is null");
+            return;
+        }
         try {
             setCurrentState(State.PREVIEW);
-            mStatusListener.onStopRecording();
+            if (mStatusListener != null) {
+                mStatusListener.onStopRecording();
+            }
             mMediaRecorder.stop();
-            mStatusListener.onMediaSaveComplete(mCurrentVideoAbsolutePath);
+            if (mStatusListener != null) {
+                mStatusListener.onMediaSaveComplete(mCurrentVideoAbsolutePath);
+            }
             File videoFile = new File(mCurrentVideoAbsolutePath);
             if (videoFile.exists() && videoFile.length() >= 0x2800) {
                 MediaScannerConnection.scanFile(
@@ -190,8 +204,14 @@ public class VideoManager extends CameraManager {
         } catch (RuntimeException e) {
             LogUtil.e(TAG, "Fail to stop recording.", e);
             Metrics.get().add("event_media_recorder_stop_failed");
-            mStatusListener.onError(ErrorType.VIDEO_RECORD_STOP_FAILED);
+            notifyStatusError(ErrorType.VIDEO_RECORD_STOP_FAILED);
             restartCamera();
+        }
+    }
+
+    private void notifyStatusError(ErrorType errorType) {
+        if (mStatusListener != null) {
+            mStatusListener.onError(errorType);
         }
     }
 
@@ -308,7 +328,9 @@ public class VideoManager extends CameraManager {
             closeCamera();
             openCamera();
             FocusManager.get().resetFocusStateToIdle();
-            mUpdatePreviewListener.updateVideoPreview();
+            if (mUpdatePreviewListener != null) {
+                mUpdatePreviewListener.updateVideoPreview();
+            }
         }
     }
 

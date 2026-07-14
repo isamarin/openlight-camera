@@ -221,35 +221,33 @@ public class Util {
         return "on".equals(CamPrefsFactory.get().getStringValue("wheel_inverse_scroll_setting"));
     }
 
+    private static final int SHARED_PREF_UPDATE_CURRENT = 2;
+
     public static void resetCameraPreference() {
         Prefs prefs = CamPrefsFactory.get();
-        try {
-            PackageManager pm = CameraApp.get().getPackageManager();
-            int versionCode = pm.getPackageInfo(CameraApp.get().getPackageName(), 0).versionCode;
-            if (versionCode <= 7) {
-                LogUtil.i(TAG, "Shared Preference change. Clean up!");
-                prefs.removeValue("ex_index");
-                prefs.removeValue("iso_index");
-                prefs.removeValue("shutter_index");
-                prefs.removeValue("zoom_value");
-                prefs.removeValue("metering_setting");
-            }
-            int updateVersion = prefs.getIntValue("shared_pref_update");
-            if (updateVersion == -1 || updateVersion < 1) {
-                LogUtil.i(TAG, "Upgrading Settings based on version: " + updateVersion);
-                prefs.removeValue("flash_setting");
-                prefs.removeValue("flash_value");
-                prefs.removeValue("flash_setting_manual");
-                prefs.putValue("shared_pref_update", 1);
-            }
-            prefs.removeValue("burst_mode");
-            prefs.removeValue("focal_length");
-            prefs.removeValue("zoom_value");
-            prefs.removeValue("device_touchstrip_setting");
-            prefs.removeValue("white_balance_setting");
-        } catch (PackageManager.NameNotFoundException e) {
-            LogUtil.e(TAG, "Exception in resettingCameraPreference", e);
+        int updateVersion = prefs.getIntValue("shared_pref_update");
+        if (updateVersion == -1 || updateVersion < 1) {
+            LogUtil.i(TAG, "Upgrading Settings based on version: " + updateVersion);
+            prefs.removeValue("flash_setting");
+            prefs.removeValue("flash_value");
+            prefs.removeValue("flash_setting_manual");
+            updateVersion = 1;
+            prefs.putValue("shared_pref_update", updateVersion);
         }
+        if (updateVersion < 2) {
+            LogUtil.i(TAG, "Shared Preference change. Clean up!");
+            prefs.removeValue("ex_index");
+            prefs.removeValue("iso_index");
+            prefs.removeValue("shutter_index");
+            prefs.removeValue("zoom_value");
+            prefs.removeValue("metering_setting");
+            prefs.putValue("shared_pref_update", SHARED_PREF_UPDATE_CURRENT);
+        }
+        prefs.removeValue("burst_mode");
+        prefs.removeValue("focal_length");
+        prefs.removeValue("zoom_value");
+        prefs.removeValue("device_touchstrip_setting");
+        prefs.removeValue("white_balance_setting");
     }
 
     public static void restartAppWithDelay(Activity activity) {

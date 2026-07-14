@@ -74,6 +74,10 @@ public class ImageManager extends CameraManager {
 
     @Override
     public void createCameraSession(SurfaceTexture surfaceTexture, Size previewSize) {
+        if (mCameraDevice == null) {
+            LogUtil.e(TAG, "Cannot create image session: camera device is null");
+            return;
+        }
         try {
             ImageReaderManager irm = mImageReaderManager;
             android.media.ImageReader jpegReader = irm.getJpegImageReader();
