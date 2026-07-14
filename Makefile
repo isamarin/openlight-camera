@@ -65,6 +65,10 @@ $(STAGE3_BUILDDIR): build/classes2.jar $(LIGHT_CAMERA_FILES)
 $(OUTPUT_NAME): $(STAGE3_BUILDDIR)
 	$(APKTOOL) b $(STAGE3_BUILDDIR) -o $@
 
+.PHONY: version
+version:
+	bash .github/scripts/calver.sh
+
 .PHONY: apk
 apk: $(OUTPUT_NAME)
 

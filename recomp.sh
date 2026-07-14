@@ -39,7 +39,7 @@ if [[ $# -eq 0 ]]; then
 else
   case "$1" in
     build)
-      CMD=(make openlight_camera.apk)
+      CMD=(bash -c "bash .github/scripts/calver.sh && make apk")
       shift
       ;;
     clean)
