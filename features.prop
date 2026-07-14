@@ -5,6 +5,12 @@
 # Enable debug mode even on user builds (default: false)
 debug_on_user=false
 
+# Require RAW-capable camera (default: true; set false for emulator)
+#camera.require_raw=false
+
+# Accept any YUV preview size instead of 1280x720 cap (default: false)
+#camera.relax_yuv_size=false
+
 # Show restart-on-error recovery (default: true)
 restart.on.error=true
 

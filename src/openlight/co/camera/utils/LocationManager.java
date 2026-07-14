@@ -2,6 +2,7 @@ package openlight.co.camera.utils;
 
 import android.annotation.SuppressLint;
 import android.app.PendingIntent;
+import android.os.Build;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -97,8 +98,15 @@ public class LocationManager {
                 if (!nmea.startsWith("$GPGGA")) return;
                 LogUtil.d(TAG, "NMEA @ " + new Date(timestamp) + " " + nmea);
                 String[] parts = nmea.split(",");
+                if (parts.length <= NMEA_MSL_ABOVE_WGS_84) {
+                    return;
+                }
                 String altStr = parts[NMEA_MSL_ABOVE_WGS_84];
                 if (altStr.isEmpty()) return;
+                if (parts.length <= NMEA_LAT || parts.length <= NMEA_LAT_REF
+                        || parts.length <= NMEA_LNG || parts.length <= NMEA_LNG_REF) {
+                    return;
+                }
                 String latStr = parts[NMEA_LAT];
                 if (latStr.isEmpty()) return;
                 int latSign = "N".equals(parts[NMEA_LAT_REF]) ? 1 : -1;
@@ -170,6 +178,13 @@ public class LocationManager {
         return sInstance;
     }
 
+    private static int pendingIntentFlags() {
+        if (Build.VERSION.SDK_INT >= 31) {
+            return PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.FLAG_UPDATE_CURRENT;
+    }
+
     private int box(double degrees) {
         return (int)(degrees * SECS_PER_DEGREE);
     }
@@ -182,7 +197,8 @@ public class LocationManager {
         if (mLocationUpdateIntent == null) {
             Intent intent = new Intent("openlight.co.intent.LOCATION_UPDATE");
             intent.setClass(mContext, LocationReceiver.class);
-            mLocationUpdateIntent = PendingIntent.getBroadcast(mContext, 0x87a76, intent, 0x8000000);
+            mLocationUpdateIntent = PendingIntent.getBroadcast(
+                    mContext, 0x87a76, intent, pendingIntentFlags());
         }
         return mLocationUpdateIntent;
     }

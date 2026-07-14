@@ -85,6 +85,7 @@ public class CameraActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        FeatureManager.reload(this);
         mLockStateHelper.register(this);
         getWindow().addFlags(0x80000);
         onConfigurationChanged(new Configuration());

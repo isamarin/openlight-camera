@@ -19,6 +19,7 @@ import java.util.Comparator;
 import java.util.List;
 import openlight.co.camera.CameraMode;
 import openlight.co.lib.content.CamPrefsFactory;
+import openlight.co.lib.utils.FeatureManager;
 import openlight.co.lib.utils.LogUtil;
 
 public class CameraInfo {
@@ -130,7 +131,8 @@ public class CameraInfo {
                     LogUtil.w(TAG, "Skipping camera since not rear facing " + cameraId);
                     continue;
                 }
-                if (!doesCameraSupportRaw(chars)) {
+                boolean requireRaw = FeatureManager.get().getBoolean("camera.require_raw", true);
+                if (requireRaw && !doesCameraSupportRaw(chars)) {
                     LogUtil.w(TAG, "Skipping camera, does not support raw " + cameraId);
                     continue;
                 }
@@ -178,23 +180,36 @@ public class CameraInfo {
                         Arrays.asList(jpegSizes),
                         new CompareSizesByArea());
                 mRawFormat = getRawSensorFormatType();
-                Size[] rawSizes = mStreamConfigurationMap.getOutputSizes(mRawFormat);
-                if (rawSizes == null || rawSizes.length == 0) {
-                    LogUtil.w(TAG, "Skipping camera, no RAW output sizes " + cameraId);
-                    continue;
-                }
-                mLargestRawOutputSize = (Size) Collections.max(
-                    Arrays.asList(rawSizes),
-                    new CompareSizesByArea());
-                LogUtil.d(TAG, " RAW_SENSOR: largest raw captured size: " + mLargestRawOutputSize.getWidth() + " : " + mLargestRawOutputSize.getHeight());
-                Size[] yuvSizes = mStreamConfigurationMap.getOutputSizes(0x23);
-                for (int j = 0; j < yuvSizes.length; j++) {
-                    LogUtil.d(TAG, " Looping through size: " + yuvSizes[j].getWidth() + " : " + yuvSizes[j].getHeight());
-                    if (yuvSizes[j].getWidth() > 0x500 || yuvSizes[j].getHeight() > 0x2d0) {
+                if (requireRaw) {
+                    Size[] rawSizes = mStreamConfigurationMap.getOutputSizes(mRawFormat);
+                    if (rawSizes == null || rawSizes.length == 0) {
+                        LogUtil.w(TAG, "Skipping camera, no RAW output sizes " + cameraId);
                         continue;
                     }
-                    mLargestYuvOutputSize = new Size(yuvSizes[j].getWidth(), yuvSizes[j].getHeight());
-                    break;
+                    mLargestRawOutputSize = (Size) Collections.max(
+                            Arrays.asList(rawSizes),
+                            new CompareSizesByArea());
+                } else {
+                    mLargestRawOutputSize = mLargestJpegOutputSize;
+                    LogUtil.i(TAG, "RAW not required; using JPEG size as RAW fallback for " + cameraId);
+                }
+                LogUtil.d(TAG, " RAW_SENSOR: largest raw captured size: " + mLargestRawOutputSize.getWidth() + " : " + mLargestRawOutputSize.getHeight());
+                Size[] yuvSizes = mStreamConfigurationMap.getOutputSizes(0x23);
+                boolean relaxYuv = FeatureManager.get().getBoolean("camera.relax_yuv_size", false);
+                if (relaxYuv && yuvSizes != null && yuvSizes.length > 0) {
+                    mLargestYuvOutputSize = (Size) Collections.max(
+                            Arrays.asList(yuvSizes),
+                            new CompareSizesByArea());
+                    LogUtil.i(TAG, "Relaxed YUV size selection for " + cameraId);
+                } else if (yuvSizes != null) {
+                    for (int j = 0; j < yuvSizes.length; j++) {
+                        LogUtil.d(TAG, " Looping through size: " + yuvSizes[j].getWidth() + " : " + yuvSizes[j].getHeight());
+                        if (yuvSizes[j].getWidth() > 0x500 || yuvSizes[j].getHeight() > 0x2d0) {
+                            continue;
+                        }
+                        mLargestYuvOutputSize = new Size(yuvSizes[j].getWidth(), yuvSizes[j].getHeight());
+                        break;
+                    }
                 }
                 if (mLargestYuvOutputSize == null) {
                     LogUtil.w(TAG, "This camera does not support the desired YUV size");
@@ -235,9 +250,6 @@ public class CameraInfo {
     public float getCBCamerasFocalLengthRatio() { return mCBFocalLengthRatio; }
     public CameraCharacteristics getCameraCharacteristics() { return mCameraCharacteristics; }
     public String getCameraId() {
-        if (mCameraId == null) {
-            throw new IllegalStateException("No capable camera available");
-        }
         return mCameraId;
     }
     public float getDefaultToMinFocalLengthRatio() { return mDefaultToMinFocalLengthRatio; }

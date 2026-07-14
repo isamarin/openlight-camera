@@ -1,0 +1,8 @@
+# Emulator / dev overrides — push before launch:
+#   adb push features.prop.emulator /sdcard/features.prop
+
+camera.require_raw=false
+camera.relax_yuv_size=true
+debug_on_user=true
+histogram.enable=false
+hud.logging=true
