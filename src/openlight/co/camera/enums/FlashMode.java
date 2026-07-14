@@ -13,7 +13,7 @@ public enum FlashMode {
     AUTO("flash_auto", 0x7f080093, 0x7f0e0029, 0x7f0800cd, 0x7f0800ee, 2) {
         @Override
         public boolean isEnabled() {
-            CameraMode mode = CameraManager.get().getCameraMode();
+            CameraMode mode = CameraManager.getCameraModeOrDefault();
             return mode.isAuto() || mode.isIso() || mode.isShutter();
         }
     },

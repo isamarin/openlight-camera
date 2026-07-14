@@ -25,7 +25,7 @@ import openlight.co.lib.utils.FeatureManager;
 public class SettingAdapter extends RecyclerView.Adapter<SettingAdapter.SettingHolder> {
     private static final String TAG = "SettingAdapter";
     private static final String GALLERY_PACKAGE_NAME = "light.co.lightgallery";
-    private static final String MANAGE_PRESETS_ACTIVITY_CLASSNAME = "light.co.gallery.view.ManagePresetsActivity";
+    private static final String MANAGE_PRESETS_ACTIVITY_CLASSNAME = "openlight.co.gallery.view.ManagePresetsActivity";
 
     private final Context mContext;
     private int mMarginValue;
@@ -291,8 +291,8 @@ public class SettingAdapter extends RecyclerView.Adapter<SettingAdapter.SettingH
         // TODO: This requires openlight gallery app to exist
         MANAGE_PRESETS(false, 0x7f0e001f, 4, 0x7f080125,
                 new Intent().setComponent(new ComponentName(
-                        "light.co.lightgallery",
-                        "light.co.gallery.view.ManagePresetsActivity"))),
+                        GALLERY_PACKAGE_NAME,
+                        MANAGE_PRESETS_ACTIVITY_CLASSNAME))),
         IN_POCKET_DETECTION(true, 0x7f0e010b, "inpocket_detection_setting", 1, 0x7f080143, false),
         LENS_BLOCKED_DETECTION(true, 0x7f0e010c, "lens_blocked_detector_setting", 1, 0x7f080144, false),
         STACKED_CAPTURE(FeatureManager.get().getBoolean("stacked.capture.selector", false),

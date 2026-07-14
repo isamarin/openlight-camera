@@ -70,7 +70,10 @@ public class MeteringRect {
         int sensorX = (int) (screenX * scale + Util.getCoordinateDifference(scale, sensorW, viewW));
         int sensorY = (int) (screenY * scale + Util.getCoordinateDifference(scale, sensorH, viewH));
 
-        CaptureResult captureResult = CameraManager.get().getCaptureResultPerFrame();
+        CameraManager cameraManager = CameraManager.get();
+        CaptureResult captureResult = cameraManager != null
+                ? cameraManager.getCaptureResultPerFrame()
+                : null;
         Rect cropRect = null;
         if (captureResult != null) {
             cropRect = (Rect) captureResult.get(CaptureResult.SCALER_CROP_REGION);

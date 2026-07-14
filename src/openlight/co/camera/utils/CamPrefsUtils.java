@@ -170,7 +170,7 @@ public class CamPrefsUtils {
 
     public static String getFlash() {
         Prefs prefs = CamPrefsFactory.get();
-        CameraMode mode = CameraManager.get().getCameraMode();
+        CameraMode mode = CameraManager.getCameraModeOrDefault();
         String key = mode.isManual() ? "flash_setting_manual" : "flash_setting";
         checkAndUpdateFlash(key, prefs);
         if (TheaterModeSettings.get().isFlashLightDisabled()) {
@@ -181,21 +181,21 @@ public class CamPrefsUtils {
 
     public static void putFlash(String value) {
         Prefs prefs = CamPrefsFactory.get();
-        CameraMode mode = CameraManager.get().getCameraMode();
+        CameraMode mode = CameraManager.getCameraModeOrDefault();
         String key = mode.isManual() ? "flash_setting_manual" : "flash_setting";
         prefs.putValue(key, value);
     }
 
     public static boolean isFlashOff() {
         Prefs prefs = CamPrefsFactory.get();
-        CameraMode mode = CameraManager.get().getCameraMode();
+        CameraMode mode = CameraManager.getCameraModeOrDefault();
         String key = mode.isManual() ? "flash_setting_manual" : "flash_setting";
         return "flash_off".equals(prefs.getStringValue(key));
     }
 
     public static String getCafMode() {
         Prefs prefs = CamPrefsFactory.get();
-        CameraMode mode = CameraManager.get().getCameraMode();
+        CameraMode mode = CameraManager.getCameraModeOrDefault();
         String key;
         if (mode.isManual()) {
             key = "cam_manual_mode_caf";
@@ -209,7 +209,7 @@ public class CamPrefsUtils {
 
     public static void setCafMode(String value) {
         Prefs prefs = CamPrefsFactory.get();
-        CameraMode mode = CameraManager.get().getCameraMode();
+        CameraMode mode = CameraManager.getCameraModeOrDefault();
         String key;
         if (mode.isManual()) {
             key = "cam_manual_mode_caf";

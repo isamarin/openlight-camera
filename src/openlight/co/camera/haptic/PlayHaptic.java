@@ -129,8 +129,9 @@ public class PlayHaptic {
     }
 
     public void playHaptic(Immersion immersion) {
+        CameraManager cameraManager = CameraManager.get();
         if (!mIsHapticsEnabled || TheaterModeSettings.get().isHapticFeedbackDisabled()
-                || CameraManager.get().isRecording() || !init()) {
+                || cameraManager == null || cameraManager.isRecording() || !init()) {
             LogUtil.d(TAG, "Haptics not enabled, ignoring play haptic request: " + immersion);
             return;
         }

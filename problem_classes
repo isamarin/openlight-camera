@@ -1,24 +1,23 @@
 light_camera/smali/openlight/co/camera/haptic/PlayHaptic.smali:
 	Causes loss of haptics
 
-light_camera/smali/openlight/co/camera/managers/CameraManager.smali:
-	Code decompiled incorrectly
-
 light_camera/smali/openlight/co/lib/exif/ExifInterface.smali:
 	Method not decompiled: openlight.co.lib.exif.ExifInterface.getJpegAttributes(openlight.co.lib.exif.ExifInterface$ByteOrderedDataInputStream, int, int):void
 
 light_camera/smali/openlight/co/camera/view/setting/SettingAdapter.smali:
-	Multiple Errors on compile
+	Fixed: wrong ManagePresetsActivity class name in decompilation
 
 light_camera/smali/openlight/co/camera/view/hud/HudLayout.smali:
-	skipped: "renamed from: openlight.co.camera.view.hud.HudLayout$3  reason: invalid class name"
+	Resolved: anonymous class $3 inlined correctly in Java
 
 light_camera/smali/openlight/co/camera/utils/LocationManager.smali:
-	Code decompiled incorrectly
+	Fixed: scheduleSave() NPE when handler not initialized
 
 light_camera/smali/openlight/co/camera/CameraActivity.smali:
-	Compiles but Crashes
+	Matches smali; crashes were downstream (CameraManager fixes)
 
 light_camera/smali/openlight/co/camera/CameraInfo.smali:
-	Code decompiled incorrectly
-	Short function failed, this takes priority over other failing decomps.
+	Fixed: null guards for stream map and focal lengths
+
+light_camera/smali/openlight/co/camera/managers/CameraManager.smali:
+	Fixed: inverted readyForFocus logic, UpdatePreviewListener NPEs

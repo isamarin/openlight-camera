@@ -87,7 +87,7 @@ public class Util {
     }
 
     public static long getCaptureAnimationDuration(CaptureResult captureResult) {
-        if (CameraManager.get().getCameraMode().isManual()) {
+        if (CameraManager.getCameraModeOrDefault().isManual()) {
             long exposureNs = Constants.exposureTimes[CamPrefsFactory.get().getIntValue("shutter_index")];
             return TimeUnit.NANOSECONDS.toMillis(exposureNs) + EXTRA_TIME_TO_EXPOSURE;
         }

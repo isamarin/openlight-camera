@@ -261,7 +261,7 @@ public class HudLayout extends ControlManager implements OrientationListener {
         ArrayList<HudValue> visible = new ArrayList<>();
         ArrayList<HudValue> dimmed = new ArrayList<>();
         ArrayList<HudValue> hidden = new ArrayList<>();
-        switch (CameraManager.get().getCameraMode()) {
+        switch (CameraManager.getCameraModeOrDefault()) {
             case AUTO:
                 visible.add(HudValue.EV);
                 visible.add(HudValue.ISO);
@@ -361,7 +361,7 @@ public class HudLayout extends ControlManager implements OrientationListener {
     }
 
     public void updateHudValues() {
-        switch (CameraManager.get().getCameraMode()) {
+        switch (CameraManager.getCameraModeOrDefault()) {
             case AUTO:
             case ISO:
             case SHUTTER:

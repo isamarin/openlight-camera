@@ -199,6 +199,9 @@ public class LocationManager {
     }
 
     private void scheduleSave() {
+        if (mHandler == null) {
+            return;
+        }
         mHandler.removeCallbacks(mSaveRunnable);
         mHandler.postDelayed(mSaveRunnable, 1000L);
     }

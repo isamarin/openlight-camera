@@ -161,9 +161,9 @@ public abstract class CameraManager {
                         LogUtil.d(TAG, "AE Manager State Locked: " + aeFocusMgr.isLocked());
                         if (!aeFocusMgr.isLocked()) {
                             boolean isZooming = mZoomManager.isCurrentlyZooming();
-                            boolean captureIdle = ((CaptureManager) mCaptureManager.get()).isIdle();
-                            boolean captureQueued = captureIdle ? false : ((CaptureManager) mCaptureManager.get()).isQueued();
-                            boolean readyForFocus = captureIdle || captureQueued;
+                            CaptureManager captureMgr = (CaptureManager) mCaptureManager.get();
+                            boolean captureIdle = captureMgr.isIdle();
+                            boolean readyForFocus = !captureIdle || !captureMgr.isQueued();
                             if (!isZooming && readyForFocus) {
                                 mCameraState.setSessionState(CameraState.SessionState.WAITING_FOR_FOCUS_TRIGGER);
                                 mTimingLoggerUtil.captureTiming(TimingLoggerUtil.TimeToAutoFocusSplits.START_FOCUS);
@@ -237,7 +237,9 @@ public abstract class CameraManager {
                     mCameraDevice = null;
                 }
                 mCameraMetrics.add("event_camera_device_error");
-                mUpdatePreviewListener.cameraDeviceError();
+                if (mUpdatePreviewListener != null) {
+                    mUpdatePreviewListener.cameraDeviceError();
+                }
             }
 
             @Override
@@ -247,7 +249,9 @@ public abstract class CameraManager {
                     mCameraOpenCloseLock.release();
                     mCameraDevice = camera;
                     mCameraState.setDeviceState(CameraState.DeviceState.OPEN);
-                    mUpdatePreviewListener.cameraDeviceOpen();
+                    if (mUpdatePreviewListener != null) {
+                        mUpdatePreviewListener.cameraDeviceOpen();
+                    }
                 }
             }
         };
@@ -284,7 +288,7 @@ public abstract class CameraManager {
                             } else {
                                 noFaces = false;
                             }
-                            if (mCurrentState == State.OPEN) {
+                            if (mCurrentState == State.OPEN && mUpdatePreviewListener != null) {
                                 int iso = getISO(result);
                                 long shutterSpeed = getShutterSpeed(result);
                                 boolean isFirstFrame = (frameNumber < 1);
@@ -306,14 +310,18 @@ public abstract class CameraManager {
                             int afState = afStateObj;
                             if (ZoomManager.get().isCurrentlyZooming()) {
                                 LogUtil.w(TAG, "Zoom in progress. Cannot Focus!");
-                                mUpdatePreviewListener.focusFailedUpdateUi();
+                                if (mUpdatePreviewListener != null) {
+                                    mUpdatePreviewListener.focusFailedUpdateUi();
+                                }
                                 focusComplete();
                                 return;
                             }
                             if (afState == 4) {
                                 LogUtil.i(TAG, "Focus Achieved in frame: " + result.getFrameNumber());
                                 mTimingLoggerUtil.captureTiming(TimingLoggerUtil.TimeToAutoFocusSplits.FOCUS_ACHIEVED);
-                                mUpdatePreviewListener.focusSuccessUpdateUi();
+                                if (mUpdatePreviewListener != null) {
+                                    mUpdatePreviewListener.focusSuccessUpdateUi();
+                                }
                                 focusComplete();
                                 mCameraState.setSessionState(CameraState.SessionState.PREVIEW);
                             } else if (afState == 5) {
@@ -326,7 +334,9 @@ public abstract class CameraManager {
                             }
                             if (hasTimeToFocusThresholdPassed()) {
                                 LogUtil.i(TAG, "Focus Timeout");
-                                mUpdatePreviewListener.focusFailedUpdateUi();
+                                if (mUpdatePreviewListener != null) {
+                                    mUpdatePreviewListener.focusFailedUpdateUi();
+                                }
                                 focusComplete();
                             }
                             break;
@@ -423,6 +433,14 @@ public abstract class CameraManager {
         return sInstance;
     }
 
+    public static CameraMode getCameraModeOrDefault() {
+        CameraManager manager = sInstance;
+        if (manager != null) {
+            return manager.getCameraMode();
+        }
+        return CameraMode.getMode(CamPrefsFactory.get().getStringValue("camera_mode_setting"));
+    }
+
     public static void set(CameraManager manager) {
         sInstance = manager;
     }
@@ -474,6 +492,9 @@ public abstract class CameraManager {
 
     private boolean showHandshakeAssist(CaptureResult result) {
         Long exposureTime = (Long) result.get(CaptureResult.SENSOR_EXPOSURE_TIME);
+        if (exposureTime == null) {
+            return false;
+        }
         long exposure = exposureTime.longValue();
         if (exposure > BC_HANDSHAKE_EXPOSURE_TIME_THRESHOLD && mZoomManager.isInBCFocalLength()) {
             return true;
@@ -550,7 +571,9 @@ public abstract class CameraManager {
                         if (mCamMode.isManual()) {
                             CaptureRequestBuilder.setAwbLock(mPreviewRequestBuilder, false);
                         }
-                        mUpdatePreviewListener.onCaptureSessionConfigured();
+                        if (mUpdatePreviewListener != null) {
+                            mUpdatePreviewListener.onCaptureSessionConfigured();
+                        }
                     }
                 }
             }, mCameraBackgroundHandler);
@@ -758,7 +781,9 @@ public abstract class CameraManager {
                 || (CameraMode.isVideoMode(oldMode) && CameraMode.isPictureMode(mCamMode))) {
             mZoomManager.resetTempZoomLevel();
         }
-        mUpdatePreviewListener.updateModeChange();
+        if (mUpdatePreviewListener != null) {
+            mUpdatePreviewListener.updateModeChange();
+        }
         updateCameraModeOnChange();
     }
 

@@ -145,6 +145,10 @@ public class CameraInfo {
                 mSupportedAeStep = (Rational) chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP);
                 CameraCharacteristics focalChars = manager.getCameraCharacteristics(cameraId);
                 mLensesFocalLengths = (float[]) focalChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                if (mLensesFocalLengths == null || mLensesFocalLengths.length == 0) {
+                    LogUtil.w(TAG, "Skipping camera, no focal lengths " + cameraId);
+                    continue;
+                }
                 Integer maxFaces = (Integer) chars.get(CameraCharacteristics.STATISTICS_INFO_MAX_FACE_COUNT);
                 if (maxFaces != null) {
                     mMaxNumOfFaces = maxFaces;
@@ -161,14 +165,26 @@ public class CameraInfo {
                 LogUtil.d(TAG, "mMinFocalLengthLens:  " + mMinFocalLengthLens);
                 LogUtil.d(TAG, "maxToMinFocalLengthRatio:  " + mMaxToMinZoomRatio);
                 mStreamConfigurationMap = (StreamConfigurationMap) chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                if (mStreamConfigurationMap != null) {
-                    mLargestJpegOutputSize = (Size) Collections.max(
-                        Arrays.asList(mStreamConfigurationMap.getOutputSizes(0x100)),
-                        new CompareSizesByArea());
+                if (mStreamConfigurationMap == null) {
+                    LogUtil.w(TAG, "Skipping camera, no stream configuration map " + cameraId);
+                    continue;
                 }
+                Size[] jpegSizes = mStreamConfigurationMap.getOutputSizes(0x100);
+                if (jpegSizes == null || jpegSizes.length == 0) {
+                    LogUtil.w(TAG, "Skipping camera, no JPEG output sizes " + cameraId);
+                    continue;
+                }
+                mLargestJpegOutputSize = (Size) Collections.max(
+                        Arrays.asList(jpegSizes),
+                        new CompareSizesByArea());
                 mRawFormat = getRawSensorFormatType();
+                Size[] rawSizes = mStreamConfigurationMap.getOutputSizes(mRawFormat);
+                if (rawSizes == null || rawSizes.length == 0) {
+                    LogUtil.w(TAG, "Skipping camera, no RAW output sizes " + cameraId);
+                    continue;
+                }
                 mLargestRawOutputSize = (Size) Collections.max(
-                    Arrays.asList(mStreamConfigurationMap.getOutputSizes(mRawFormat)),
+                    Arrays.asList(rawSizes),
                     new CompareSizesByArea());
                 LogUtil.d(TAG, " RAW_SENSOR: largest raw captured size: " + mLargestRawOutputSize.getWidth() + " : " + mLargestRawOutputSize.getHeight());
                 Size[] yuvSizes = mStreamConfigurationMap.getOutputSizes(0x23);
@@ -218,10 +234,18 @@ public class CameraInfo {
     public float getCACamerasFocalLengthRatio() { return mCAFocalLengthRatio; }
     public float getCBCamerasFocalLengthRatio() { return mCBFocalLengthRatio; }
     public CameraCharacteristics getCameraCharacteristics() { return mCameraCharacteristics; }
-    public String getCameraId() { return mCameraId; }
+    public String getCameraId() {
+        if (mCameraId == null) {
+            throw new IllegalStateException("No capable camera available");
+        }
+        return mCameraId;
+    }
     public float getDefaultToMinFocalLengthRatio() { return mDefaultToMinFocalLengthRatio; }
 
     public int getFinalCaptureResolution(float zoom) {
+        if (mLensesFocalLengths == null || mLensesFocalLengths.length < 2) {
+            return IMAGE_RESOLUTION_MIN;
+        }
         if (zoom / 10.0f >= mLensesFocalLengths[1]) {
             return Math.round((float) mImageResolutionBCFactor / (zoom * zoom));
         }
