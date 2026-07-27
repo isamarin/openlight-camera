@@ -36,7 +36,7 @@ video.size=2688x1512
 video.bitrate=0
 
 # Show quality selector UI in video ancillary toolbar (default: false)
-video.quality.selector.beta=false
+video.quality.selector.beta=true
 
 # Maximum video recording length in seconds (default: 25)
 video.length.max=25
@@ -104,11 +104,11 @@ in.pocket.als.max.val=2.0
 encryption_setting_displayed=true
 
 # Show the stacked capture setting row (default: false)
-stacked.capture.selector=false
+stacked.capture.selector=true
 
 # --- HUD / debug ---
 # Enable verbose HUD logging (default: false)
 hud.logging=false
 
 # Enable histogram display (default: false)
-histogram.enable=false
+histogram.enable=true

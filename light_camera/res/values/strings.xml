@@ -94,7 +94,8 @@ af"</string>
     <string name="ftu_end_button">start shooting</string>
     <string name="ftu_end_subtitle_text">"You are on your way to
 becoming an L16 photographer."</string>
-    <string name="ftu_end_text">Want more tips? Go to support.light.co</string>
+    <string name="ftu_end_text">"Want more tips? Light is gone — this is a
+community build: github.com/isamarin/openlight-camera"</string>
     <string name="ftu_focus_fail_button_text">got it</string>
     <string name="ftu_focus_fail_text">"The square shakes when the L16 can't focus. Tap again!"</string>
     <string name="ftu_focus_next">next</string>
@@ -132,12 +133,13 @@ becoming an L16 photographer."</string>
    (digital zoom only)"</string>
     <string name="ftu_video_limitation_line_4">• Slight audio noise over 70mm</string>
     <string name="ftu_video_limitation_line_5">• No AE lock</string>
-    <string name="ftu_video_limitation_subtitle_text">"We are continuing to improve 
-our video, so you may not see 
-these features just yet."</string>
+    <string name="ftu_video_limitation_subtitle_text">"Light shut down before finishing
+video mode. This build picks it up
+where they left off."</string>
     <string name="ftu_video_limitation_title_text">Here are some limitations at this time:</string>
     <string name="ftu_video_spec_line_1">• Lens: 28mm or 70mm</string>
-    <string name="ftu_video_spec_line_2">• Resolution: 1080p</string>
+    <string name="ftu_video_spec_line_2">"• Resolution: up to 2160p
+   (1080p by default)"</string>
     <string name="ftu_video_spec_line_3">• Zoom range: 28-150mm</string>
     <string name="ftu_video_spec_subtitle_text">"Video on the L16 is taken by 
 one camera at a time"</string>
