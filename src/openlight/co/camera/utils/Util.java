@@ -114,22 +114,25 @@ public class Util {
             return lo;
         }
 
+        // The table descends, so a value smaller than the midpoint sits to the right.
         while (true) {
             int mid = (lo + hi) / 2;
             int midVal = Constants.SensitivityValues.forIndex(mid).getSensitivityVal();
             if (isoValue <= midVal) {
-                if (isoValue == midVal) return mid;
+                if (isoValue == midVal) {
+                    return mid;
+                }
                 lo = mid + 1;
             } else {
                 hi = mid - 1;
                 int adjVal = Constants.SensitivityValues.forIndex(hi).getSensitivityVal();
-                if (isoValue >= adjVal) {
-                    if (isoValue == adjVal) return hi;
-                    if (isoValue * isoValue >= midVal * adjVal) {
-                        return hi;
-                    } else {
-                        return mid;
-                    }
+                if (isoValue < adjVal) {
+                    // Bracketed between two stops: snap to whichever is closer on a log
+                    // scale, i.e. compare against the geometric mean of the pair.
+                    return isoValue * isoValue >= midVal * adjVal ? hi : mid;
+                }
+                if (isoValue == adjVal) {
+                    return hi;
                 }
             }
         }

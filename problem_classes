@@ -33,6 +33,9 @@ openlight/co/touchstrip/TouchStrip.java:
 
 openlight/co/camera/utils/Util.java:
 	fixed — shared_pref_update migration; removed dead catch (phase 0)
+	fixed — getCurrentIso: the two cmp branches were swapped when translating the
+	        smali, which spun the main thread forever on 246 ISO values and
+	        returned the wrong stop on nearly all the rest (ANR on live hardware)
 
 openlight/co/camera/managers/capture/CaptureManager.java:
 	fixed — migrated from smali (phase 2); Provider method refs
