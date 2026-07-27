@@ -33,37 +33,40 @@ fi
 
 INTERACTIVE=0
 
+# The container is entered through bash itself (see DOCKER_FLAGS below), so CMD
+# holds bash's own arguments — a leading "bash" would make it try to run the
+# bash binary as a script and die with "cannot execute binary file".
 if [[ $# -eq 0 ]]; then
-  CMD=(bash)
+  CMD=()
   INTERACTIVE=1
 else
   case "$1" in
     build)
-      CMD=(bash -c "bash .github/scripts/calver.sh && make apk")
       shift
+      CMD=(-c "bash .github/scripts/calver.sh && make apk $*")
+      set --
       ;;
     clean)
-      CMD=(make clean)
       shift
+      CMD=(-c "make clean $*")
+      set --
       ;;
     rebuild)
-      CMD=(make clean apk)
       shift
+      CMD=(-c "make clean apk $*")
+      set --
       ;;
     bash|shell)
-      CMD=(bash)
-      INTERACTIVE=1
       shift
+      CMD=()
+      INTERACTIVE=1
+      set --
       ;;
     *)
-      CMD=("$@")
+      CMD=(-c "$*")
       set --
       ;;
   esac
-
-  if [[ $# -gt 0 ]]; then
-    CMD+=("$@")
-  fi
 fi
 
 DOCKER_FLAGS=(--rm --entrypoint bash -v "$PWD":/workspace -w /workspace)

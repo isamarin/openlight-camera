@@ -27,6 +27,8 @@ openlight/co/camera/managers/CameraManager.java:
 
 openlight/co/camera/managers/video/VideoManager.java:
 	fixed — listener and camera device null checks (phase 0)
+	fixed — video.size / video.bitrate overrides on top of CamcorderProfile;
+	        2688x1512 @ 38.9 Mbit/s verified on the L16
 
 openlight/co/touchstrip/TouchStrip.java:
 	fixed — synchronized get() (phase 0)

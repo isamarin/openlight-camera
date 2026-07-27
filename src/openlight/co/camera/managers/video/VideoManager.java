@@ -14,11 +14,13 @@ import android.media.MediaCodec;
 import android.media.MediaRecorder;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Size;
 import android.view.Surface;
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import openlight.co.camera.CameraApp;
 import openlight.co.camera.managers.CameraManager;
 import openlight.co.camera.managers.focus.FocusManager;
@@ -52,6 +54,15 @@ public class VideoManager extends CameraManager {
     private final File mThumbnailsDir;
     private volatile boolean mUseSuffixFileName;
     private int mVideoQualityProfile;
+
+    /** h264 ceiling from /system/etc/media_profiles.xml on the L16. */
+    private static final int MAX_VIDEO_BITRATE = 42000000;
+
+    private int mVideoWidth;
+    private int mVideoHeight;
+    private int mVideoBitRate;
+    private int mVideoFrameRate;
+    private long mRecordingStartedAt;
 
     private VideoManager() {
         super();
@@ -166,6 +177,7 @@ public class VideoManager extends CameraManager {
             resetMediaRecorder();
             prepareMediaRecorder();
             mMediaRecorder.start();
+            mRecordingStartedAt = SystemClock.elapsedRealtime();
         } catch (IOException | IllegalStateException e) {
             LogUtil.e(TAG, "Fail to start recording.", e);
             Metrics.get().add("event_media_recorder_start_failed");
@@ -190,6 +202,7 @@ public class VideoManager extends CameraManager {
                 mStatusListener.onMediaSaveComplete(mCurrentVideoAbsolutePath);
             }
             File videoFile = new File(mCurrentVideoAbsolutePath);
+            logRecordingMetrics(videoFile);
             if (videoFile.exists() && videoFile.length() >= 0x2800) {
                 MediaScannerConnection.scanFile(
                         CameraApp.get(),
@@ -295,13 +308,99 @@ public class VideoManager extends CameraManager {
         mMediaRecorder.setInputSurface(mRecordingSurface);
         mVideoQualityProfile = VideoQualityMode.valueOf(mCamPref.getStringValue("quality_profile"))
                 .getQualityProfile();
-        mMediaRecorder.setProfile(CamcorderProfile.get(mVideoQualityProfile));
+        CamcorderProfile profile = CamcorderProfile.get(mVideoQualityProfile);
+        mMediaRecorder.setProfile(profile);
+        applyVideoOverrides(profile);
         mCurrentVideoAbsolutePath = getVideoFileAbsolutePath();
         mMediaRecorder.setOutputFile(mCurrentVideoAbsolutePath);
         mMediaRecorder.setOrientationHint(
                 OrientationsController.get().getConfig().getOrientationHint());
         mMediaRecorder.prepare();
         LogUtil.d(TAG, "media recorder prepared");
+    }
+
+    /**
+     * CamcorderProfile on the L16 only offers 480p/720p/1080p/2160p, so anything in
+     * between has to be set on top of a profile. The size must be one the camera
+     * actually offers (see CameraInfo's output size list) — MediaRecorder.prepare()
+     * fails on anything else and recording never starts.
+     */
+    private void applyVideoOverrides(CamcorderProfile profile) {
+        mVideoWidth = profile.videoFrameWidth;
+        mVideoHeight = profile.videoFrameHeight;
+        mVideoBitRate = profile.videoBitRate;
+        mVideoFrameRate = profile.videoFrameRate;
+
+        String requested = FeatureManager.get().getString("video.size");
+        if (requested != null && !requested.trim().isEmpty()) {
+            Size size = parseVideoSize(requested.trim());
+            if (size == null) {
+                LogUtil.w(TAG, "Ignoring malformed video.size: " + requested);
+                mCameraMetrics.add("event_video_size_override_invalid");
+            } else {
+                // Keep bits-per-pixel roughly constant with the profile we started from.
+                long scaled = (long) mVideoBitRate
+                        * size.getWidth() * size.getHeight()
+                        / ((long) profile.videoFrameWidth * profile.videoFrameHeight);
+                mVideoWidth = size.getWidth();
+                mVideoHeight = size.getHeight();
+                mVideoBitRate = (int) Math.min(scaled, MAX_VIDEO_BITRATE);
+                mMediaRecorder.setVideoSize(mVideoWidth, mVideoHeight);
+            }
+        }
+
+        int bitRateOverride = FeatureManager.get().getInt("video.bitrate", 0);
+        if (bitRateOverride > 0) {
+            mVideoBitRate = Math.min(bitRateOverride, MAX_VIDEO_BITRATE);
+        }
+        mMediaRecorder.setVideoEncodingBitRate(mVideoBitRate);
+
+        LogUtil.i(TAG, "[VIDEO] profile=" + mVideoQualityProfile
+                + " size=" + mVideoWidth + "x" + mVideoHeight
+                + " (profile " + profile.videoFrameWidth + "x" + profile.videoFrameHeight + ")"
+                + " bitrate=" + mVideoBitRate + " fps=" + mVideoFrameRate);
+    }
+
+    private Size parseVideoSize(String value) {
+        int x = value.indexOf('x');
+        if (x <= 0 || x == value.length() - 1) {
+            return null;
+        }
+        try {
+            int width = Integer.parseInt(value.substring(0, x));
+            int height = Integer.parseInt(value.substring(x + 1));
+            return width > 0 && height > 0 ? new Size(width, height) : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * What the encoder actually delivered, which is the only way to tell a request
+     * that was honoured from one the hardware quietly throttled.
+     */
+    private void logRecordingMetrics(File videoFile) {
+        long durationMs = mRecordingStartedAt > 0
+                ? SystemClock.elapsedRealtime() - mRecordingStartedAt : 0;
+        long bytes = videoFile.exists() ? videoFile.length() : 0;
+        long achievedBitRate = durationMs > 0 ? bytes * 8000 / durationMs : 0;
+
+        LogUtil.i(TAG, "[VIDEO] recorded " + mVideoWidth + "x" + mVideoHeight
+                + " duration=" + durationMs + "ms"
+                + " size=" + bytes + "B"
+                + " bitrate_actual=" + achievedBitRate
+                + " bitrate_requested=" + mVideoBitRate);
+
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put("resolution", mVideoWidth + "x" + mVideoHeight);
+        properties.put("duration_ms", Long.toString(durationMs));
+        properties.put("file_bytes", Long.toString(bytes));
+        properties.put("bitrate_requested", Integer.toString(mVideoBitRate));
+        properties.put("bitrate_actual", Long.toString(achievedBitRate));
+        properties.put("fps_requested", Integer.toString(mVideoFrameRate));
+        mCameraMetrics.add("event_video_recorded", properties);
+
+        mRecordingStartedAt = 0;
     }
 
     private void releaseMediaRecorder() {
