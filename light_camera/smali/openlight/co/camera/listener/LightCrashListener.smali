@@ -206,7 +206,10 @@
 
     invoke-static {p0, v0}, Lopenlight/co/lib/utils/LogUtil;->d(Ljava/lang/String;Ljava/lang/String;)V
 
-    const/4 p0, 0x1
+    # Returning true suppresses the default handler, so crashes die via
+    # System.exit with no stack trace anywhere. Keep that on user builds, but
+    # let the default handler print the trace when debugging is enabled.
+    sget-boolean p0, Lopenlight/co/lib/utils/CommonConstants;->IS_USER_BUILD:Z
 
     return p0
 .end method

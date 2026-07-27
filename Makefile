@@ -61,6 +61,10 @@ $(STAGE3_BUILDDIR): build/classes2.jar $(LIGHT_CAMERA_FILES)
 	cp -r light_camera/AndroidManifest.xml $@
 	cp -r light_camera/apktool.yml $@
 	$(UNZIP_EXE) -oj build/classes2.jar "classes.dex" -d $@
+# unzip restores the stored mtime (epoch 0) on the extracted dex, so apktool's
+# incremental check reads it as unchanged and repackages a stale classes.dex.
+# Stamp it now so a rebuilt dex actually reaches the apk.
+	touch $@/classes.dex
 
 $(OUTPUT_NAME): $(STAGE3_BUILDDIR)
 	$(APKTOOL) b $(STAGE3_BUILDDIR) -o $@

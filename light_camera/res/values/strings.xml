@@ -53,7 +53,7 @@
     <string name="ancillary_timer_option_20">20</string>
     <string name="ancillary_timer_option_3">3</string>
     <string name="ancillary_timer_option_5">5</string>
-    <string name="app_name">Camera</string>
+    <string name="app_name">OpenLight Camera (Private Beta)</string>
     <string name="appbar_scrolling_view_behavior">android.support.design.widget.AppBarLayout$ScrollingViewBehavior</string>
     <string name="apply">apply</string>
     <string name="aspect_ratio_title">"aspect

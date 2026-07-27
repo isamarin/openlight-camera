@@ -37,7 +37,10 @@ dl_aar() {
 echo "=== Downloading Maven Central JARs ==="
 dl_jar "gson-2.8.9.jar"           "https://repo1.maven.org/maven2/com/google/code/gson/gson/2.8.9/gson-2.8.9.jar"
 dl_jar "glide-3.8.0.jar"          "https://repo1.maven.org/maven2/com/github/bumptech/glide/glide/3.8.0/glide-3.8.0.jar"
-dl_jar "wire-runtime-2.2.0.jar"   "https://repo1.maven.org/maven2/com/squareup/wire/wire-runtime/2.2.0/wire-runtime-2.2.0.jar"
+# 2.3.0-RC1, not 2.2.0: the generated ltpb enum adapters extend
+# com.squareup.wire.EnumAdapter, which only exists from 2.3.0-RC1 onwards.
+# With 2.2.0 every one of them fails to load and capture dies on save.
+dl_jar "wire-runtime-2.3.0-RC1.jar" "https://repo1.maven.org/maven2/com/squareup/wire/wire-runtime/2.3.0-RC1/wire-runtime-2.3.0-RC1.jar"
 dl_jar "okio-1.15.0.jar"          "https://repo1.maven.org/maven2/com/squareup/okio/okio/1.15.0/okio-1.15.0.jar"
 dl_jar "commons-io-2.6.jar"       "https://repo1.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar"
 
