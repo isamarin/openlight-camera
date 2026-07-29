@@ -9,7 +9,7 @@ import android.os.RemoteException;
 public interface IThermalMonitorService extends IInterface {
 
     abstract class Stub extends Binder implements IThermalMonitorService {
-        private static final String DESCRIPTOR = "openlight.co.thermalmonitor.IThermalMonitorService";
+        private static final String DESCRIPTOR = "light.co.thermalmonitor.IThermalMonitorService";
         static final int TRANSACTION_getCurrentLevel = 1;
 
         public Stub() {

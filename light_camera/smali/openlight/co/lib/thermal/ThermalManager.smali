@@ -190,11 +190,11 @@
     .line 119
     new-instance v0, Landroid/content/Intent;
 
-    const-string v1, "openlight.co.thermalmonitor.ThermalService"
+    const-string v1, "light.co.thermalmonitor.ThermalService"
 
     invoke-direct {v0, v1}, Landroid/content/Intent;-><init>(Ljava/lang/String;)V
 
-    const-string v1, "openlight.co.thermalmonitor"
+    const-string v1, "light.co.thermalmonitor"
 
     .line 120
     invoke-virtual {v0, v1}, Landroid/content/Intent;->setPackage(Ljava/lang/String;)Landroid/content/Intent;

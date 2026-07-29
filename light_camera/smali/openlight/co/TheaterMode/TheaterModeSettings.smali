@@ -16,7 +16,7 @@
 
 .field private static final TAG:Ljava/lang/String; = "TheaterModeSettings"
 
-.field private static final THEATER_MODE_AUTHORITY:Ljava/lang/String; = "openlight.co.theatermode.provider"
+.field private static final THEATER_MODE_AUTHORITY:Ljava/lang/String; = "light.co.theatermode.provider"
 
 .field private static final THEATER_MODE_TABLE_NAME:Ljava/lang/String; = "settings"
 
@@ -55,7 +55,7 @@
 .method static constructor <clinit>()V
     .registers 1
 
-    const-string v0, "content://openlight.co.theatermode.provider/settings"
+    const-string v0, "content://light.co.theatermode.provider/settings"
 
     .line 31
     invoke-static {v0}, Landroid/net/Uri;->parse(Ljava/lang/String;)Landroid/net/Uri;
