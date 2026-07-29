@@ -21,6 +21,15 @@ public class TouchStrip {
 
     public static final String SHARED_PREF_TOUCHSTRIP_SETTING_OFF = "off";
 
+    /** How much strip travel one zoom step costs; see SCROLL_DISTANCE_PER_STEP. */
+    public static final String SHARED_PREF_TOUCHSTRIP_SPEED_SETTING = "device_touchstrip_speed_setting";
+
+    public static final String SPEED_SLOW = "slow";
+
+    public static final String SPEED_DEFAULT = "normal";
+
+    public static final String SPEED_FAST = "fast";
+
     private static final String TAG = "TouchStrip";
 
     private static final int TAP_CENTER_OFFSET_RANGE = 100;
@@ -36,6 +45,21 @@ public class TouchStrip {
     private static final int THRESHOLD_SCROLL_MAX_DISTANCE = 150;
 
     private static final int THRESHOLD_SCROLL_MIN_DISTANCE = 5;
+
+    /**
+     * Strip travel, in device units, that makes up one zoom step.
+     *
+     * The original code emitted a swipe per scroll callback whose delta cleared
+     * THRESHOLD_SCROLL_MIN_DISTANCE, so the zoom tracked how many events the
+     * detector happened to fire rather than how far the finger actually moved —
+     * a slow drag produced a burst of steps. Accumulating distance instead makes
+     * one step cost a fixed amount of travel. The strip reports 0..768 and the
+     * zoom wheel has ~52 detents, so ~15 units per step spans the whole range in
+     * a single pass.
+     */
+    private static final float SCROLL_DISTANCE_PER_STEP = 15.0F;
+
+    private static final int MAX_STEPS_PER_SCROLL_EVENT = 4;
 
     private static final long TIME_DURATION_TO_COUNT_EVENTS = 400L;
 
@@ -57,6 +81,9 @@ public class TouchStrip {
 
     private volatile int mCurrentScrollEventsCumulativeDistance = 0;
 
+    /** Strip travel banked since the last emitted zoom step. */
+    private volatile float mScrollAccumulator = 0.0F;
+
     private GestureDetectorCompat mDetector;
 
     // $FF: synthetic method
@@ -74,19 +101,14 @@ public class TouchStrip {
         //final TouchStrip this$0;
 
         public void run() {
-            if ((TouchStrip.this.mCurrentEventForTimeDurationMatching == TouchStrip.Event.SWIPE_LEFT
-                    || TouchStrip.this.mCurrentEventForTimeDurationMatching == TouchStrip.Event.SWIPE_RIGHT)
-                    && (TouchStrip.this.mCurrentScrollEventConsecutiveOccurrences > 8L
-                            || TouchStrip.this.mCurrentScrollEventConsecutiveOccurrences > 350L)) {
-                TouchStrip.Event event;
-                TouchStrip touchStrip = TouchStrip.this;
-                if (TouchStrip.this.mCurrentEventForTimeDurationMatching == TouchStrip.Event.SWIPE_LEFT) {
-                    event = TouchStrip.Event.FLING_LEFT;
-                } else {
-                    event = TouchStrip.Event.FLING_RIGHT;
-                }
-                touchStrip.notifyEventListeners(event);
-            }
+            // Light promoted a sustained scroll into a fling, which made the listener
+            // jump to the next prime focal length — so every swipe snapped between
+            // primes instead of scrubbing the range. (Their guard was also broken:
+            // both halves tested mCurrentScrollEventConsecutiveOccurrences, so the
+            // 350-unit distance check never applied and >8 events was enough.)
+            // A swipe now steps the zoom smoothly; jumping to a prime is what a
+            // deliberate fling (onFling, velocity over THRESHOLD_FLING_VELOCITY) and
+            // a tap are for.
             TouchStrip.this.stopFlingEventDetection();
         }
     };
@@ -156,6 +178,8 @@ public class TouchStrip {
             public boolean onDown(MotionEvent param1MotionEvent) {
                 TouchStrip touchStrip = TouchStrip.this;
                 touchStrip.logIt(TouchStrip.TAG, "onDown " + param1MotionEvent.toString());
+                // Travel banked by the previous gesture must not spill into this one.
+                touchStrip.mScrollAccumulator = 0.0F;
                 return true;
             }
 
@@ -197,23 +221,12 @@ public class TouchStrip {
 
             public boolean onScroll(MotionEvent param1MotionEvent1, MotionEvent param1MotionEvent2, float param1Float1,
                     float param1Float2) {
-                boolean bool1;
                 TouchStrip.this.processScrollEventToDetectSensitiveFling(param1Float1);
-                if (param1Float1 < -5.0F && param1Float1 > -150.0F) {
-                    TouchStrip.this.notifyEventListeners(TouchStrip.Event.SWIPE_RIGHT);
-                    bool1 = true;
-                } else {
-                    bool1 = false;
+                if (param1Float1 <= -150.0F || param1Float1 >= 150.0F) {
+                    // Jump this large is a fling; leave it to onFling.
+                    return false;
                 }
-                boolean bool2 = bool1;
-                if (param1Float1 > 5.0F) {
-                    bool2 = bool1;
-                    if (param1Float1 < 150.0F) {
-                        TouchStrip.this.notifyEventListeners(TouchStrip.Event.SWIPE_LEFT);
-                        bool2 = true;
-                    }
-                }
-                return bool2;
+                return TouchStrip.this.emitScrollSteps(param1Float1);
             }
 
             public void onShowPress(MotionEvent param1MotionEvent) {
@@ -285,6 +298,47 @@ public class TouchStrip {
             this.mCurrentScrollEventsCumulativeDistance = (int) (this.mCurrentScrollEventsCumulativeDistance
                     + Math.abs(paramFloat));
         }
+    }
+
+    /**
+     * Turns raw scroll distance into zoom steps at a fixed cost in strip travel,
+     * so the zoom follows how far the finger moved rather than how many scroll
+     * callbacks the detector produced.
+     */
+    private boolean emitScrollSteps(float paramFloat) {
+        if (paramFloat > -THRESHOLD_SCROLL_MIN_DISTANCE && paramFloat < THRESHOLD_SCROLL_MIN_DISTANCE) {
+            return false;
+        }
+        this.mScrollAccumulator += paramFloat;
+        float perStep = getScrollDistancePerStep();
+        int steps = (int) (this.mScrollAccumulator / perStep);
+        if (steps == 0) {
+            return false;
+        }
+        this.mScrollAccumulator -= steps * perStep;
+
+        Event event = (steps > 0) ? Event.SWIPE_LEFT : Event.SWIPE_RIGHT;
+        int count = Math.min(Math.abs(steps), MAX_STEPS_PER_SCROLL_EVENT);
+        for (int i = 0; i < count; i++) {
+            notifyEventListeners(event);
+        }
+        return true;
+    }
+
+    /** Strip travel per zoom step, widened or narrowed by the user's speed setting. */
+    private float getScrollDistancePerStep() {
+        String speed = SPEED_DEFAULT;
+        if (this.mApplication != null) {
+            speed = getSharedPreferences((Context) this.mApplication)
+                    .getString(SHARED_PREF_TOUCHSTRIP_SPEED_SETTING, SPEED_DEFAULT);
+        }
+        if (SPEED_SLOW.equals(speed)) {
+            return SCROLL_DISTANCE_PER_STEP * 2.0F;
+        }
+        if (SPEED_FAST.equals(speed)) {
+            return SCROLL_DISTANCE_PER_STEP / 2.0F;
+        }
+        return SCROLL_DISTANCE_PER_STEP;
     }
 
     private void startFlingEventDetection(Event paramEvent) {

@@ -308,6 +308,7 @@ mode"</string>
     <string name="setting_title_metering">metering mode</string>
     <string name="setting_title_mute_mic">mute microphone when recording video</string>
     <string name="setting_title_touchstrip">touchstrip</string>
+    <string name="setting_title_touchstrip_speed">touchstrip speed</string>
     <string name="setting_title_video_format">video mode</string>
     <string name="setting_title_viewfinder_timeout">viewfinder timeout</string>
     <string name="short_time_format">hh:mm a</string>

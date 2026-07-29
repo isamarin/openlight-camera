@@ -20,6 +20,11 @@
         <item>normal</item>
         <item>strong</item>
     </string-array>
+    <string-array name="touchstrip_speed_list">
+        <item>slow</item>
+        <item>normal</item>
+        <item>fast</item>
+    </string-array>
     <string-array name="iso_value">
         <item>3200</item>
         <item>2400</item>

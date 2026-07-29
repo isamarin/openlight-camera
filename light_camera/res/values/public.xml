@@ -25,6 +25,7 @@
     <public type="array" name="replay_tutorials_list" id="0x7f030004" />
     <public type="array" name="shutter_value" id="0x7f030005" />
     <public type="array" name="sound_themes" id="0x7f030006" />
+    <public type="array" name="touchstrip_speed_list" id="0x7f030007" />
     <public type="attr" name="actionBarDivider" id="0x7f040000" />
     <public type="attr" name="actionBarItemBackground" id="0x7f040001" />
     <public type="attr" name="actionBarPopupTheme" id="0x7f040002" />
@@ -2310,6 +2311,7 @@
     <public type="string" name="white_balance_title" id="0x7f0e013e" />
     <public type="string" name="zoom_title" id="0x7f0e013f" />
     <public type="string" name="zoom_value_measure_unit" id="0x7f0e0140" />
+    <public type="string" name="setting_title_touchstrip_speed" id="0x7f0e0141" />
     <public type="style" name="AlertDialog.AppCompat" id="0x7f0f0000" />
     <public type="style" name="AlertDialog.AppCompat.Light" id="0x7f0f0001" />
     <public type="style" name="Animation.AppCompat.Dialog" id="0x7f0f0002" />

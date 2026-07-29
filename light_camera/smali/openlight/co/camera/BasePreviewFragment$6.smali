@@ -31,6 +31,31 @@
 .end method
 
 
+.method private stepZoom(Lopenlight/co/camera/BasePreviewFragment;F)V
+    .registers 5
+
+    # Surface the zoom wheel the same way a display scroll does, then advance the
+    # zoom by exactly one detent in the direction of p2.
+    sget-object v0, Lopenlight/co/camera/view/zoom/ZoomWheel$EventType;->TOUCHSTRIP:Lopenlight/co/camera/view/zoom/ZoomWheel$EventType;
+
+    invoke-virtual {p1, v0}, Lopenlight/co/camera/BasePreviewFragment;->showZoomWheelView(Lopenlight/co/camera/view/zoom/ZoomWheel$EventType;)V
+
+    invoke-virtual {p1}, Lopenlight/co/camera/BasePreviewFragment;->removeFocusCrossHair()V
+
+    iget-object v0, p1, Lopenlight/co/camera/BasePreviewFragment;->mZoomManager:Lopenlight/co/camera/managers/zoom/ZoomManager;
+
+    invoke-virtual {v0, p2}, Lopenlight/co/camera/managers/zoom/ZoomManager;->setZoom(F)V
+
+    iget-object v0, p1, Lopenlight/co/camera/BasePreviewFragment;->mZoomManager:Lopenlight/co/camera/managers/zoom/ZoomManager;
+
+    iget-object v1, p1, Lopenlight/co/camera/BasePreviewFragment;->mZoomWheel:Lopenlight/co/camera/view/zoom/ZoomWheel;
+
+    invoke-virtual {v0, v1}, Lopenlight/co/camera/managers/zoom/ZoomManager;->performZoom(Lopenlight/co/camera/view/zoom/ZoomWheel;)V
+
+    return-void
+.end method
+
+
 # virtual methods
 .method public onEvent(Lopenlight/co/touchstrip/TouchStrip$Event;)V
     .registers 5
@@ -97,7 +122,7 @@
     :cond_37
     sget-object v0, Lopenlight/co/touchstrip/TouchStrip$Event;->FLING_LEFT:Lopenlight/co/touchstrip/TouchStrip$Event;
 
-    if-ne p1, v0, :cond_4b
+    if-ne p1, v0, :cond_tap_right
 
     .line 733
     iget-object p0, p0, Lopenlight/co/camera/BasePreviewFragment$6;->this$0:Lopenlight/co/camera/BasePreviewFragment;
@@ -106,6 +131,61 @@
 
     # invokes: Lopenlight/co/camera/BasePreviewFragment;->setZoomToNextPrimeLevel(Z)V
     invoke-static {p0, p1}, Lopenlight/co/camera/BasePreviewFragment;->access$400(Lopenlight/co/camera/BasePreviewFragment;Z)V
+
+    goto :goto_4b
+
+    # A tap jumps between prime focal lengths, matching the fling behaviour.
+    :cond_tap_right
+    sget-object v0, Lopenlight/co/touchstrip/TouchStrip$Event;->TAP_RIGHT:Lopenlight/co/touchstrip/TouchStrip$Event;
+
+    if-ne p1, v0, :cond_tap_left
+
+    iget-object p0, p0, Lopenlight/co/camera/BasePreviewFragment$6;->this$0:Lopenlight/co/camera/BasePreviewFragment;
+
+    const/4 p1, 0x1
+
+    invoke-static {p0, p1}, Lopenlight/co/camera/BasePreviewFragment;->access$400(Lopenlight/co/camera/BasePreviewFragment;Z)V
+
+    goto :goto_4b
+
+    :cond_tap_left
+    sget-object v0, Lopenlight/co/touchstrip/TouchStrip$Event;->TAP_LEFT:Lopenlight/co/touchstrip/TouchStrip$Event;
+
+    if-ne p1, v0, :cond_swipe_right
+
+    iget-object p0, p0, Lopenlight/co/camera/BasePreviewFragment$6;->this$0:Lopenlight/co/camera/BasePreviewFragment;
+
+    const/4 p1, 0x0
+
+    invoke-static {p0, p1}, Lopenlight/co/camera/BasePreviewFragment;->access$400(Lopenlight/co/camera/BasePreviewFragment;Z)V
+
+    goto :goto_4b
+
+    # A swipe steps the zoom continuously through every wheel detent instead of
+    # snapping to a prime, so the strip scrubs the focal range smoothly.
+    :cond_swipe_right
+    sget-object v0, Lopenlight/co/touchstrip/TouchStrip$Event;->SWIPE_RIGHT:Lopenlight/co/touchstrip/TouchStrip$Event;
+
+    if-ne p1, v0, :cond_swipe_left
+
+    iget-object v0, p0, Lopenlight/co/camera/BasePreviewFragment$6;->this$0:Lopenlight/co/camera/BasePreviewFragment;
+
+    const/high16 v1, 0x3f800000    # 1.0f
+
+    invoke-direct {p0, v0, v1}, Lopenlight/co/camera/BasePreviewFragment$6;->stepZoom(Lopenlight/co/camera/BasePreviewFragment;F)V
+
+    goto :goto_4b
+
+    :cond_swipe_left
+    sget-object v0, Lopenlight/co/touchstrip/TouchStrip$Event;->SWIPE_LEFT:Lopenlight/co/touchstrip/TouchStrip$Event;
+
+    if-ne p1, v0, :cond_4b
+
+    iget-object v0, p0, Lopenlight/co/camera/BasePreviewFragment$6;->this$0:Lopenlight/co/camera/BasePreviewFragment;
+
+    const/high16 v1, -0x40800000    # -1.0f
+
+    invoke-direct {p0, v0, v1}, Lopenlight/co/camera/BasePreviewFragment$6;->stepZoom(Lopenlight/co/camera/BasePreviewFragment;F)V
 
     goto :goto_4b
 

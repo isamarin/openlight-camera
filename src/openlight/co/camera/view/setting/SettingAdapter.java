@@ -25,7 +25,7 @@ import openlight.co.lib.utils.FeatureManager;
 public class SettingAdapter extends RecyclerView.Adapter<SettingAdapter.SettingHolder> {
     private static final String TAG = "SettingAdapter";
     private static final String GALLERY_PACKAGE_NAME = "light.co.lightgallery";
-    private static final String MANAGE_PRESETS_ACTIVITY_CLASSNAME = "openlight.co.gallery.view.ManagePresetsActivity";
+    private static final String MANAGE_PRESETS_ACTIVITY_CLASSNAME = "light.co.gallery.view.ManagePresetsActivity";
 
     private final Context mContext;
     private int mMarginValue;
@@ -268,7 +268,13 @@ public class SettingAdapter extends RecyclerView.Adapter<SettingAdapter.SettingH
         VIEWFINDER_TIMEOUT(false, 0x7f0e0121, "device_cam_finder_timeout_setting", 3, 0, 0, true),
         HAPTIC(true, 0x7f0e011b, "device_haptic_setting", 3, 0x7f080142, 0x7f030001, true),
         AUDIO(true, 0x7f0e0113, "device_audio_setting", 3, 0x7f08013d, 0x7f030006, false),
-        TOUCHSTRIP(false, 0x7f0e011f, "device_touchstrip_setting", 1, 0x7f080149, false),
+        // Light hid this row, but the strip itself works: it is a real input device
+        // (elan-touchscreen, X 0..768, Y 0..1) and TouchStrip has the full gesture
+        // handler. The preference still defaults to "off", so showing the row only
+        // gives the user the switch — it does not change behaviour on its own.
+        TOUCHSTRIP(true, 0x7f0e011f, "device_touchstrip_setting", 1, 0x7f080149, false),
+        // How far the finger travels per zoom step: slow / normal / fast.
+        TOUCHSTRIP_SPEED(true, 0x7f0e0141, "device_touchstrip_speed_setting", 3, 0x7f080149, 0x7f030007, false),
         FTU_RESET(true, 0x7f0e0119, "ftu_setting", 3, 0x7f080147, 0x7f030004, null, false) {
             @Override
             public List<Integer> getOptionList() {
