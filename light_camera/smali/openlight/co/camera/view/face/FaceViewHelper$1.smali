@@ -72,6 +72,13 @@
 
     move-result-object p0
 
+    # facerectanglesview exists only in camera_preview_fragment, not in
+    # fragment_video — but init() runs from BasePreviewFragment, which both
+    # fragments share. In video mode findViewById returns null and this
+    # setVisibility used to throw, killing the process in a restart loop
+    # whenever show.face.rect was on.
+    if-eqz p0, :goto_3e
+
     const/4 p1, 0x0
 
     invoke-virtual {p0, p1}, Lopenlight/co/camera/view/face/FaceView;->setVisibility(I)V

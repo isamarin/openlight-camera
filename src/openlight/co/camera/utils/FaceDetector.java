@@ -12,12 +12,13 @@ import openlight.co.lib.utils.LogUtil;
 public class FaceDetector {
 
     private static final String TAG = "FaceDetector";
-    private static final boolean ENABLE_FACE_DETECTION;
-    private static final FaceDetector sInstance = new FaceDetector();
+    // Must be assigned before sInstance: the constructor reads it, and a static
+    // block placed after the instance would leave it false at that point — which
+    // made the startup log claim face detection was off while it was really on.
+    private static final boolean ENABLE_FACE_DETECTION =
+            FeatureManager.get().getBoolean("face.detect", true);
 
-    static {
-        ENABLE_FACE_DETECTION = FeatureManager.get().getBoolean("face.detect", true);
-    }
+    private static final FaceDetector sInstance = new FaceDetector();
 
     public interface OnFaceEventListener {
         void onFaceDetected(List<Face> faces);
