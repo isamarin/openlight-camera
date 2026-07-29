@@ -49,6 +49,11 @@ face.detect=true
 face.ui.period=100
 
 # Debug overlays: show face score / ID / rect (default: false each)
+# WARNING: show.face.rect crashes the app in a loop at preview start — the process
+# dies via System.exit(2) right after the capture session is configured, and with
+# restart.on.error it looks like the camera relaunching forever. Verified by
+# elimination on 2026-07-28. It also hits the stock light.co.lightcamera, which
+# reads this same file. Leave it false until FaceViewHelper is migrated.
 show.face.score=false
 show.face.id=false
 show.face.rect=false
