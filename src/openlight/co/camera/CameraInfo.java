@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import openlight.co.camera.CameraMode;
+import openlight.co.camera.managers.mono.MonoMode;
 import openlight.co.lib.content.CamPrefsFactory;
 import openlight.co.lib.utils.FeatureManager;
 import openlight.co.lib.utils.LogUtil;
@@ -277,7 +278,18 @@ public class CameraInfo {
     public int getNumberOfLenses() { return mNumberOfLenses; }
     public int getRawFormat() { return mRawFormat; }
     public Rect getSensorActiveArraySize() { return mSensorActiveArraySize; }
-    public List<Float> getSimulatedPrimeFocalLengthRatios() { return mSimulatedPrimeFocalLengthRatios; }
+    /**
+     * In monochrome mode the wheel is cut down to the two stops whose module group
+     * carries a panchromatic sensor; the intermediate primes would hand back a shot
+     * with no monochrome plane in it at all. ZoomManager reads this once when it is
+     * built, so a mode change takes effect on the next camera session.
+     */
+    public List<Float> getSimulatedPrimeFocalLengthRatios() {
+        if (MonoMode.isActive()) {
+            return SimulatedPrimeFocalLengths.getMonoPrimeFocalLengths(mMinFocalLengthLens);
+        }
+        return mSimulatedPrimeFocalLengthRatios;
+    }
     public StreamConfigurationMap getStreamConfigurationMap() { return mStreamConfigurationMap; }
     public Range<Integer> getSupportedAERange() { return mSupportedAERange; }
     public Rational getSupportedAeStep() { return mSupportedAeStep; }
@@ -300,7 +312,9 @@ public class CameraInfo {
         SIMULATED_FOCAL_LENGTH1(28) {
             @Override
             public boolean isDefault(CameraMode mode) {
-                return mode.isVideo();
+                // Monochrome opens wide: 28 mm is the stop that carries module A2, and
+                // every mode must name a default or getDefaultFocalLength throws.
+                return mode.isVideo() || mode.isMono();
             }
         },
         SIMULATED_FOCAL_LENGTH2(35) {
@@ -324,6 +338,16 @@ public class CameraInfo {
 
         public boolean isDefault(CameraMode mode) {
             return false;
+        }
+
+        /** The subset of stops that put a panchromatic module in the shot. */
+        static List<Float> getMonoPrimeFocalLengths(float minFocalLen) {
+            List<Float> list = new ArrayList<>();
+            float scaled = minFocalLen * 10.0f;
+            for (float focal : MonoMode.focalLengths()) {
+                list.add(focal / scaled);
+            }
+            return list;
         }
 
         static List<Float> getAllPrimeFocalLength(float minFocalLen) {

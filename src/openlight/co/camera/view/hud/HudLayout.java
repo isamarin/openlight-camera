@@ -263,6 +263,8 @@ public class HudLayout extends ControlManager implements OrientationListener {
         ArrayList<HudValue> hidden = new ArrayList<>();
         switch (CameraManager.getCameraModeOrDefault()) {
             case AUTO:
+            case MONO:
+                // Monochrome meters like auto; the mode picks modules, not exposure.
                 visible.add(HudValue.EV);
                 visible.add(HudValue.ISO);
                 visible.add(HudValue.SHUTTER_SPEED);
@@ -363,6 +365,7 @@ public class HudLayout extends ControlManager implements OrientationListener {
     public void updateHudValues() {
         switch (CameraManager.getCameraModeOrDefault()) {
             case AUTO:
+            case MONO:
             case ISO:
             case SHUTTER:
                 updateHudIndividualValue(HudValue.EV);
