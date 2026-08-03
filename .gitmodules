@@ -1,0 +1,3 @@
+[submodule "vendor/Light-L16-Archive"]
+	path = vendor/Light-L16-Archive
+	url = https://github.com/isamarin/light-l16.git
