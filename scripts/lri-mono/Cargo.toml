@@ -1,0 +1,11 @@
+[package]
+name = "lri-mono"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lri-rs = { git = "https://github.com/gennyble/lri-rs", rev = "91365deccbfd1d5686ff62d77d9dea6937fcdb4d" }
+png = "0.17"
+
+[profile.release]
+opt-level = 3

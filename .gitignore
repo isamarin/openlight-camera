@@ -21,3 +21,6 @@ files.txt
 .docker-build-stamp
 /.idea/
 work/
+
+# rust tooling
+scripts/lri-mono/target/

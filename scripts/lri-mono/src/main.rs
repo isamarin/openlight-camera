@@ -1,0 +1,576 @@
+//! lri-mono — monochrome frames out of an L16 `.lri` container.
+//!
+//! The L16 writes every module that took part in a shot into one `.lri`: a chain
+//! of "LELR" blocks with protobuf headers and packed 10-bit sensor planes. One of
+//! the modules, A2, carries an AR1335 **without** a colour filter array, so its
+//! plane is already panchromatic — no demosaic, no interpolation, full 4160x3120.
+//! The colour modules need one of the CFA methods below.
+//!
+//! Methods:
+//!   native  — the plane as the sensor read it. Only for the mono module.
+//!   bayer   — colour plane straight to grey, CFA left unnormalised. Green sites
+//!             sit brighter than red and blue, so the mosaic shows as a fixed
+//!             diagonal weave. A texture, not grain: it repeats every 2 px.
+//!   bin     — 2x2 CFA quads averaged into one panchromatic sample. Half the
+//!             linear resolution, noise sigma halved (one stop).
+//!   r, b    — one CFA phase, half resolution. The classic filter looks: red
+//!             darkens sky and clears skin, blue is the orthochromatic one.
+//!   g       — green sites kept, gaps filled from the four orthogonal neighbours.
+//!             Full resolution off a quincunx lattice, so diagonal detail is
+//!             softer than the pixel count suggests.
+//!
+//! Everything works on black-subtracted linear values and only then gets a
+//! transfer curve, so `--linear` output is safe to stack or measure.
+
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+use lri_rs::{LriFile, RawImage, SensorModel};
+
+/// Sensor characterization as the container itself reports it. Camera2 metadata
+/// on the device says 64/1023 for the logical camera; the container wins here
+/// because it describes this exact plane. Override with --black / --white.
+const BLACK: f32 = 42.0;
+const WHITE: f32 = 1023.0;
+
+#[derive(Copy, Clone, PartialEq)]
+enum Method {
+    Native,
+    Bayer,
+    Bin,
+    Red,
+    Green,
+    Blue,
+}
+
+impl Method {
+    fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "native" => Method::Native,
+            "bayer" => Method::Bayer,
+            "bin" => Method::Bin,
+            "r" | "red" => Method::Red,
+            "g" | "green" => Method::Green,
+            "b" | "blue" => Method::Blue,
+            _ => return None,
+        })
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Method::Native => "native",
+            Method::Bayer => "bayer",
+            Method::Bin => "bin",
+            Method::Red => "r",
+            Method::Green => "g",
+            Method::Blue => "b",
+        }
+    }
+}
+
+struct Args {
+    input: PathBuf,
+    out: PathBuf,
+    methods: Option<Vec<Method>>,
+    modules: Option<Vec<String>>,
+    black: f32,
+    white: f32,
+    linear: bool,
+    stretch: bool,
+    stats: bool,
+    census: bool,
+}
+
+const USAGE: &str = "\
+lri-mono <file.lri> [options]
+
+  --out DIR          where the PNGs go (default: alongside the .lri)
+  --methods LIST     native,bayer,bin,r,g,b  (default: native for the mono
+                     module, bin for the colour ones; 'all' for everything)
+  --modules LIST     camera ids, e.g. A2,A1  (default: every module in the file)
+  --black N          black level (default 42, from the container)
+  --white N          saturation level (default 1023)
+  --linear           skip the sRGB curve — linear 16-bit, for stacking
+  --stretch          scale to the 99.9th percentile instead of the white level
+  --stats            per-module numbers, including the CFA phase test
+  --census           one line per module: sensor, mosaic, light collected, colour profile
+";
+
+fn main() -> ExitCode {
+    let args = match parse_args() {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            print!("{USAGE}");
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => {
+            eprintln!("lri-mono: {e}\n\n{USAGE}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let bytes = match std::fs::read(&args.input) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("lri-mono: cannot read {}: {e}", args.input.display());
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let lri = LriFile::decode(&bytes);
+    let stem = args
+        .input
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "lri".into());
+
+    println!(
+        "{}: {} modules, focal {} mm, integration {:?}, gain {:?}, tripod {:?}",
+        args.input.display(),
+        lri.image_count(),
+        lri.focal_length.map(|f| f.to_string()).unwrap_or("?".into()),
+        lri.image_integration_time,
+        lri.image_gain,
+        lri.on_tripod,
+    );
+
+    // The factory record of what sensor sits behind each of the 16 camera ids.
+    // Also present in lightcal/calibration.lri, which carries the map without
+    // any image data.
+    if args.stats {
+        for info in &lri.camera_infos {
+            println!("  hw_info: {info:?}");
+        }
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&args.out) {
+        eprintln!("lri-mono: cannot create {}: {e}", args.out.display());
+        return ExitCode::FAILURE;
+    }
+
+    let mut written = 0usize;
+    for img in lri.images() {
+        let cam = img.camera.to_string();
+        if let Some(wanted) = &args.modules {
+            if !wanted.iter().any(|w| w.eq_ignore_ascii_case(&cam)) {
+                continue;
+            }
+        }
+
+        let Some(raw) = img.unpack() else {
+            eprintln!("  {cam}: not a packed 10-bit plane, skipped");
+            continue;
+        };
+        let mono = img.sensor == SensorModel::Ar1335Mono;
+        let cfa = img.cfa_string();
+
+        println!(
+            "  {cam} {:?} {}x{} cfa {}",
+            img.sensor,
+            img.width,
+            img.height,
+            cfa.unwrap_or("none (panchromatic)")
+        );
+
+        if args.census {
+            print_census(img, &raw, args.black);
+        }
+
+        if args.stats {
+            print_stats(img, &raw, args.black, args.white);
+        }
+
+        for method in methods_for(&args, mono) {
+            let plane = match render(img, &raw, method, cfa, args.black, args.white) {
+                Ok(p) => p,
+                Err(why) => {
+                    if args.methods.is_some() {
+                        eprintln!("    {}: {why}", method.name());
+                    }
+                    continue;
+                }
+            };
+
+            let path = args.out.join(format!("{stem}_{cam}_{}.png", method.name()));
+            match write_png(&path, &plane, args.linear, args.stretch) {
+                Ok(()) => {
+                    println!("    {} -> {}x{}  {}", method.name(), plane.w, plane.h, path.display());
+                    written += 1;
+                }
+                Err(e) => eprintln!("    {}: {e}", method.name()),
+            }
+        }
+    }
+
+    println!("{written} image(s) written");
+    ExitCode::SUCCESS
+}
+
+fn methods_for(args: &Args, mono: bool) -> Vec<Method> {
+    match &args.methods {
+        Some(list) => list.clone(),
+        // An audit run reports and writes nothing; ask for a method to get images.
+        None if args.census || args.stats => Vec::new(),
+        None if mono => vec![Method::Native],
+        None => vec![Method::Bin],
+    }
+}
+
+// ------------------------------------------------------------------ rendering
+
+/// A single-channel image in linear 0..1, black already subtracted.
+struct Plane {
+    w: usize,
+    h: usize,
+    px: Vec<f32>,
+}
+
+fn render(
+    img: &RawImage,
+    raw: &[u16],
+    method: Method,
+    cfa: Option<&str>,
+    black: f32,
+    white: f32,
+) -> Result<Plane, String> {
+    let (w, h) = (img.width, img.height);
+    let norm = |v: u16| ((v as f32 - black) / (white - black)).clamp(0.0, 1.0);
+
+    let plane = match method {
+        Method::Native => {
+            if cfa.is_some() {
+                return Err("colour sensor — native is for the mono module".into());
+            }
+            Plane { w, h, px: raw.iter().map(|&v| norm(v)).collect() }
+        }
+
+        Method::Bayer => {
+            if cfa.is_none() {
+                return Err("mono sensor — use native".into());
+            }
+            Plane { w, h, px: raw.iter().map(|&v| norm(v)).collect() }
+        }
+
+        // Works on either sensor: on a CFA plane it averages one Bayer quad,
+        // on the mono plane it averages four neighbouring photosites.
+        Method::Bin => {
+            let (bw, bh) = (w / 2, h / 2);
+            let mut px = vec![0.0; bw * bh];
+            for y in 0..bh {
+                for x in 0..bw {
+                    let (sx, sy) = (x * 2, y * 2);
+                    let sum = norm(raw[sy * w + sx])
+                        + norm(raw[sy * w + sx + 1])
+                        + norm(raw[(sy + 1) * w + sx])
+                        + norm(raw[(sy + 1) * w + sx + 1]);
+                    px[y * bw + x] = sum / 4.0;
+                }
+            }
+            Plane { w: bw, h: bh, px }
+        }
+
+        Method::Red | Method::Blue => {
+            let cfa = cfa.ok_or("mono sensor has no colour channels")?;
+            let want = if method == Method::Red { b'R' } else { b'B' };
+            let idx = cfa
+                .bytes()
+                .position(|c| c == want)
+                .ok_or("channel not present in this CFA")?;
+            let (ox, oy) = (idx % 2, idx / 2);
+
+            let (cw, ch) = (w / 2, h / 2);
+            let mut px = vec![0.0; cw * ch];
+            for y in 0..ch {
+                for x in 0..cw {
+                    px[y * cw + x] = norm(raw[(y * 2 + oy) * w + x * 2 + ox]);
+                }
+            }
+            Plane { w: cw, h: ch, px }
+        }
+
+        // Green sits on a quincunx: half the sites are samples, the gaps are
+        // filled from the four orthogonal neighbours, all of which are green.
+        Method::Green => {
+            let cfa = cfa.ok_or("mono sensor has no colour channels")?;
+            let is_green: Vec<bool> = cfa.bytes().map(|c| c == b'G').collect();
+            if is_green.iter().filter(|g| **g).count() != 2 {
+                return Err("unexpected CFA: not two green sites".into());
+            }
+
+            let mut px = vec![0.0; w * h];
+            for y in 0..h {
+                for x in 0..w {
+                    if is_green[(y % 2) * 2 + (x % 2)] {
+                        px[y * w + x] = norm(raw[y * w + x]);
+                        continue;
+                    }
+                    let mut sum = 0.0;
+                    let mut n = 0.0;
+                    if x > 0 {
+                        sum += norm(raw[y * w + x - 1]);
+                        n += 1.0;
+                    }
+                    if x + 1 < w {
+                        sum += norm(raw[y * w + x + 1]);
+                        n += 1.0;
+                    }
+                    if y > 0 {
+                        sum += norm(raw[(y - 1) * w + x]);
+                        n += 1.0;
+                    }
+                    if y + 1 < h {
+                        sum += norm(raw[(y + 1) * w + x]);
+                        n += 1.0;
+                    }
+                    px[y * w + x] = sum / n;
+                }
+            }
+            Plane { w, h, px }
+        }
+    };
+
+    Ok(rotate_180(plane))
+}
+
+/// The packed plane comes off the sensor upside down; every consumer of these
+/// files rotates it. Doing it after the CFA work keeps the phase honest.
+fn rotate_180(mut plane: Plane) -> Plane {
+    plane.px.reverse();
+    plane
+}
+
+// --------------------------------------------------------------------- output
+
+fn write_png(path: &Path, plane: &Plane, linear: bool, stretch: bool) -> std::io::Result<()> {
+    let ceiling = if stretch { percentile(&plane.px, 0.999).max(1e-6) } else { 1.0 };
+
+    let mut bytes = Vec::with_capacity(plane.px.len() * 2);
+    for v in &plane.px {
+        let v = (v / ceiling).clamp(0.0, 1.0);
+        let v = if linear { v } else { srgb(v) };
+        bytes.extend_from_slice(&((v * 65535.0).round() as u16).to_be_bytes());
+    }
+
+    let file = BufWriter::new(File::create(path)?);
+    let mut enc = png::Encoder::new(file, plane.w as u32, plane.h as u32);
+    enc.set_color(png::ColorType::Grayscale);
+    enc.set_depth(png::BitDepth::Sixteen);
+    let mut writer = enc.write_header()?;
+    writer.write_image_data(&bytes)?;
+    Ok(())
+}
+
+fn srgb(v: f32) -> f32 {
+    if v <= 0.0031308 {
+        12.92 * v
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+fn percentile(px: &[f32], p: f32) -> f32 {
+    let mut sorted: Vec<f32> = px.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let idx = ((sorted.len() - 1) as f32 * p).round() as usize;
+    sorted[idx]
+}
+
+// ---------------------------------------------------------------------- stats
+
+/// One line per module: what the sensor is, how its mosaic is oriented, how much
+/// light it actually collected on this frame, and what the factory measured for its
+/// colour response. Run it over a wide frame and a telephoto one and every camera id
+/// is covered — that is the whole array audited from two shots.
+fn print_census(img: &RawImage, raw: &[u16], black: f32) {
+    let (w, h) = (img.width, img.height);
+    let mut sum = 0f64;
+    let mut clipped = 0usize;
+    for &v in raw.iter() {
+        sum += (v as f32 - black).max(0.0) as f64;
+        if v >= 1020 {
+            clipped += 1;
+        }
+    }
+    let level = sum / (w * h) as f64;
+
+    let colour = img
+        .daylight()
+        .map(|c| format!("rg {:.3}  bg {:.3}", c.rg, c.bg))
+        .unwrap_or_else(|| "no daylight profile".into());
+    let whitepoints: Vec<String> = img.color.iter().map(|c| format!("{:?}", c.whitepoint)).collect();
+
+    println!(
+        "    census  level {level:7.1}  clipped {:5.2}%  {colour}  profiles [{}]",
+        clipped as f64 / (w * h) as f64 * 100.0,
+        whitepoints.join(" ")
+    );
+}
+
+/// Mean of each CFA phase. On a colour sensor the two green phases run well
+/// above red and blue under daylight; on a truly panchromatic sensor all four
+/// land on the same value, which is what tells the two apart from the data
+/// rather than from the metadata.
+fn print_stats(img: &RawImage, raw: &[u16], black: f32, white: f32) {
+    let (w, h) = (img.width, img.height);
+    let mut sums = [0f64; 4];
+    let mut counts = [0f64; 4];
+    let mut lo = u16::MAX;
+    let mut hi = 0u16;
+    let mut clipped = 0usize;
+
+    for y in 0..h {
+        for x in 0..w {
+            let v = raw[y * w + x];
+            lo = lo.min(v);
+            hi = hi.max(v);
+            if v as f32 >= white {
+                clipped += 1;
+            }
+            let phase = (y % 2) * 2 + (x % 2);
+            sums[phase] += v as f64;
+            counts[phase] += 1.0;
+        }
+    }
+
+    let means: Vec<f64> = (0..4).map(|i| sums[i] / counts[i]).collect();
+    let spread = means.iter().cloned().fold(f64::MIN, f64::max)
+        - means.iter().cloned().fold(f64::MAX, f64::min);
+    let overall: f64 = sums.iter().sum::<f64>() / counts.iter().sum::<f64>();
+
+    println!(
+        "    min {lo} max {hi} mean {overall:.1} (black {black}, clipped {:.3}%)",
+        clipped as f64 / (w * h) as f64 * 100.0
+    );
+    println!(
+        "    phase means  (0,0) {:.1}  (1,0) {:.1}  (0,1) {:.1}  (1,1) {:.1}  spread {spread:.1}",
+        means[0], means[1], means[2], means[3]
+    );
+
+    print_tiled_cfa_test(img, raw, black);
+}
+
+/// Whole-frame phase means can be fooled by a neutral scene: average enough of
+/// the world together and red, green and blue even out. This runs the same test
+/// per 64x64 tile and reports the distribution, so a single coloured patch
+/// anywhere in the frame gives a CFA sensor away. Spread is normalised by the
+/// tile's own level, so it reads as a fraction of signal rather than counts.
+fn print_tiled_cfa_test(img: &RawImage, raw: &[u16], black: f32) {
+    const TILE: usize = 64;
+    let (w, h) = (img.width, img.height);
+
+    let mut spreads: Vec<f32> = Vec::new();
+    for ty in 0..h / TILE {
+        for tx in 0..w / TILE {
+            let mut sums = [0f64; 4];
+            let mut counts = [0f64; 4];
+            for y in ty * TILE..(ty + 1) * TILE {
+                for x in tx * TILE..(tx + 1) * TILE {
+                    let v = (raw[y * w + x] as f32 - black).max(0.0);
+                    let phase = (y % 2) * 2 + (x % 2);
+                    sums[phase] += v as f64;
+                    counts[phase] += 1.0;
+                }
+            }
+            let means: Vec<f64> = (0..4).map(|i| sums[i] / counts[i]).collect();
+            let level = means.iter().sum::<f64>() / 4.0;
+            // Tiles with no signal have nothing to say about the CFA.
+            if level < 8.0 {
+                continue;
+            }
+            let hi = means.iter().cloned().fold(f64::MIN, f64::max);
+            let lo = means.iter().cloned().fold(f64::MAX, f64::min);
+            spreads.push(((hi - lo) / level) as f32);
+        }
+    }
+
+    if spreads.is_empty() {
+        println!("    tiled CFA test: no tile carried enough signal");
+        return;
+    }
+
+    spreads.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let at = |p: f32| spreads[((spreads.len() - 1) as f32 * p).round() as usize];
+    println!(
+        "    tiled CFA test ({} tiles): median {:.1}%  p95 {:.1}%  max {:.1}%",
+        spreads.len(),
+        at(0.5) * 100.0,
+        at(0.95) * 100.0,
+        at(1.0) * 100.0
+    );
+}
+
+// ------------------------------------------------------------------- cli glue
+
+fn parse_args() -> Result<Option<Args>, String> {
+    let mut input = None;
+    let mut out = None;
+    let mut methods = None;
+    let mut modules = None;
+    let mut black = BLACK;
+    let mut white = WHITE;
+    let mut linear = false;
+    let mut stretch = false;
+    let mut stats = false;
+    let mut census = false;
+
+    let mut argv = std::env::args().skip(1);
+    while let Some(arg) = argv.next() {
+        match arg.as_str() {
+            "-h" | "--help" => return Ok(None),
+            "--out" => out = Some(PathBuf::from(need(&mut argv, "--out")?)),
+            "--modules" => {
+                modules = Some(
+                    need(&mut argv, "--modules")?
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .collect(),
+                )
+            }
+            "--methods" => {
+                let raw = need(&mut argv, "--methods")?;
+                let list = if raw == "all" {
+                    vec![
+                        Method::Native,
+                        Method::Bayer,
+                        Method::Bin,
+                        Method::Red,
+                        Method::Green,
+                        Method::Blue,
+                    ]
+                } else {
+                    raw.split(',')
+                        .map(|s| {
+                            Method::parse(s.trim())
+                                .ok_or_else(|| format!("unknown method '{}'", s.trim()))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                };
+                methods = Some(list);
+            }
+            "--black" => black = need(&mut argv, "--black")?.parse().map_err(|_| "bad --black")?,
+            "--white" => white = need(&mut argv, "--white")?.parse().map_err(|_| "bad --white")?,
+            "--linear" => linear = true,
+            "--stretch" => stretch = true,
+            "--stats" => stats = true,
+            "--census" => census = true,
+            other if other.starts_with('-') => return Err(format!("unknown option '{other}'")),
+            other => input = Some(PathBuf::from(other)),
+        }
+    }
+
+    let input = input.ok_or("no .lri file given")?;
+    if white <= black {
+        return Err("--white must be above --black".into());
+    }
+    let out = out.unwrap_or_else(|| {
+        input.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."))
+    });
+
+    Ok(Some(Args { input, out, methods, modules, black, white, linear, stretch, stats, census }))
+}
+
+fn need(argv: &mut impl Iterator<Item = String>, what: &str) -> Result<String, String> {
+    argv.next().ok_or_else(|| format!("{what} needs a value"))
+}
