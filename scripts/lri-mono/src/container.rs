@@ -118,6 +118,8 @@ pub struct ModulePlane {
     pub length: u64,
     /// Where red sits in the 2x2 mosaic; (-1, -1) means there is no mosaic at all.
     pub sbro: (i32, i32),
+    /// Sensor temperature in degrees, as the module reported it for this frame.
+    pub temperature: i32,
     /// Exposure in nanoseconds and the gains, as recorded for this module alone.
     pub exposure_ns: u64,
     pub analog_gain: f32,
@@ -197,6 +199,7 @@ pub fn index(src: &dyn Source) -> io::Result<(Vec<ModulePlane>, u64)> {
                         row_stride,
                         offset: pos + surface.data_offset(),
                         length: row_stride * h as u64,
+                        temperature: module.sensor_temparature(),
                         exposure_ns: module.sensor_exposure(),
                         analog_gain: module.sensor_analog_gain(),
                         digital_gain: module.sensor_digital_gain(),
