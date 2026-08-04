@@ -290,6 +290,22 @@ fn run_peek(args: &Args, cam: &str) -> ExitCode {
 
     let raw = container::unpack_tenbit(&bytes, plane.width * plane.height);
     let cfa = plane.cfa();
+
+    // Worth knowing before walking away from the tripod: a panchromatic module collects
+    // about a stop more than its colour neighbours, so metering done on them clips it.
+    let mut sum = 0f64;
+    let mut clipped = 0usize;
+    for &v in raw.iter() {
+        sum += (v as f32 - args.black).max(0.0) as f64;
+        if v >= 1020 {
+            clipped += 1;
+        }
+    }
+    println!(
+        "  level {:.1}  clipped {:.2}%",
+        sum / raw.len() as f64,
+        clipped as f64 / raw.len() as f64 * 100.0
+    );
     let methods = match &args.methods {
         Some(list) => list.clone(),
         None if cfa.is_none() => vec![Method::Native],
