@@ -199,13 +199,10 @@
     invoke-static {v1, v2}, Lopenlight/co/lib/utils/LogUtil;->d(Ljava/lang/String;Ljava/lang/String;)V
 
     .line 274
-    sget-object v1, Landroid/hardware/camera2/CaptureRequest;->LENS_FOCAL_LENGTH:Landroid/hardware/camera2/CaptureRequest$Key;
-
-    invoke-static {v0}, Ljava/lang/Float;->valueOf(F)Ljava/lang/Float;
-
-    move-result-object v2
-
-    invoke-virtual {p1, v1, v2}, Landroid/hardware/camera2/CaptureRequest$Builder;->set(Landroid/hardware/camera2/CaptureRequest$Key;Ljava/lang/Object;)V
+    # Routed through our helper so monochrome mode reaches the preview: it snaps the
+    # focal length to a stop that carries a panchromatic module and asks for the grey
+    # viewfinder. Setting the key straight on the builder bypassed both.
+    invoke-static {p1, v0}, Lopenlight/co/camera/managers/capturerequest/CaptureRequestBuilder;->setLensFocalLength(Landroid/hardware/camera2/CaptureRequest$Builder;F)V
 
     .line 275
     iget-object p0, p0, Lopenlight/co/camera/managers/mode/ModeReqMgr;->mCamPref:Lopenlight/co/lib/content/Prefs;
@@ -624,13 +621,8 @@
     move-result p0
 
     .line 151
-    sget-object v0, Landroid/hardware/camera2/CaptureRequest;->LENS_FOCAL_LENGTH:Landroid/hardware/camera2/CaptureRequest$Key;
-
-    invoke-static {p0}, Ljava/lang/Float;->valueOf(F)Ljava/lang/Float;
-
-    move-result-object p0
-
-    invoke-virtual {p1, v0, p0}, Landroid/hardware/camera2/CaptureRequest$Builder;->set(Landroid/hardware/camera2/CaptureRequest$Key;Ljava/lang/Object;)V
+    # Same reason as the preview path above.
+    invoke-static {p1, p0}, Lopenlight/co/camera/managers/capturerequest/CaptureRequestBuilder;->setLensFocalLength(Landroid/hardware/camera2/CaptureRequest$Builder;F)V
 
     .line 152
     sget-object p0, Landroid/hardware/camera2/CaptureRequest;->SCALER_CROP_REGION:Landroid/hardware/camera2/CaptureRequest$Key;
