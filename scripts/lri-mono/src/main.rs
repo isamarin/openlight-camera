@@ -29,6 +29,9 @@ use std::process::ExitCode;
 
 use lri_rs::{LriFile, RawImage, SensorModel};
 
+mod container;
+use container::{AdbSource, LocalSource, ModulePlane, Source};
+
 /// Sensor characterization as the container itself reports it. Camera2 metadata
 /// on the device says 64/1023 for the logical camera; the container wins here
 /// because it describes this exact plane. Override with --black / --white.
@@ -81,6 +84,8 @@ struct Args {
     stretch: bool,
     stats: bool,
     census: bool,
+    peek: Option<String>,
+    device: Option<String>,
 }
 
 const USAGE: &str = "\
@@ -96,6 +101,9 @@ lri-mono <file.lri> [options]
   --stretch          scale to the 99.9th percentile instead of the white level
   --stats            per-module numbers, including the CFA phase test
   --census           one line per module: sensor, mosaic, light collected, colour profile
+  --peek CAM         read only that module's plane instead of the whole file
+  --device PATH      peek at a file on the camera over adb, e.g.
+                     --peek A2 --device /sdcard/DCIM/Camera/L16_00145.lri
 ";
 
 fn main() -> ExitCode {
@@ -110,6 +118,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if let Some(cam) = args.peek.clone() {
+        return run_peek(&args, &cam);
+    }
 
     let bytes = match std::fs::read(&args.input) {
         Ok(b) => b,
@@ -150,6 +162,16 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    // Exposure and gain are recorded per module, and lri-rs only surfaces the
+    // file-wide values — so the census reads them straight out of the container.
+    let index = if args.census {
+        container::index(&LocalSource::new(args.input.to_string_lossy().into_owned()))
+            .ok()
+            .map(|(planes, _)| planes)
+    } else {
+        None
+    };
+
     let mut written = 0usize;
     for img in lri.images() {
         let cam = img.camera.to_string();
@@ -175,7 +197,10 @@ fn main() -> ExitCode {
         );
 
         if args.census {
-            print_census(img, &raw, args.black);
+            let plane = index
+                .as_ref()
+                .and_then(|planes| planes.iter().find(|p| p.camera.eq_ignore_ascii_case(&cam)));
+            print_census(img, &raw, args.black, plane);
         }
 
         if args.stats {
@@ -183,7 +208,7 @@ fn main() -> ExitCode {
         }
 
         for method in methods_for(&args, mono) {
-            let plane = match render(img, &raw, method, cfa, args.black, args.white) {
+            let plane = match render(img.width, img.height, &raw, method, cfa, args.black, args.white) {
                 Ok(p) => p,
                 Err(why) => {
                     if args.methods.is_some() {
@@ -208,6 +233,116 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Pull one module's plane instead of the whole shot.
+///
+/// A frame is 160–230 MB; a single plane is 16. Over a link that manages 2–3 MB/s that
+/// is ten seconds against two minutes — the difference between checking a monochrome
+/// frame while still standing at the tripod and checking it back at the desk.
+fn run_peek(args: &Args, cam: &str) -> ExitCode {
+    let source: Box<dyn Source> = match &args.device {
+        Some(path) => Box::new(AdbSource::new(path.clone())),
+        None => Box::new(LocalSource::new(args.input.to_string_lossy().into_owned())),
+    };
+
+    let (planes, walked) = match container::index(source.as_ref()) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("lri-mono: cannot index {}: {e}", source.name());
+            return ExitCode::FAILURE;
+        }
+    };
+
+    println!("{}: {} modules, {:.0} MB", source.name(), planes.len(), walked as f64 / 1.0e6);
+    for p in &planes {
+        println!(
+            "  {:<3} {}x{}  cfa {:<5}  exposure {:>7.3} ms  gain {:.2}x  plane {:.1} MB at {}",
+            p.camera,
+            p.width,
+            p.height,
+            p.cfa().unwrap_or("none"),
+            p.exposure_ns as f64 / 1.0e6,
+            p.analog_gain,
+            p.length as f64 / 1.0e6,
+            p.offset
+        );
+    }
+
+    let Some(plane) = planes.iter().find(|p| p.camera.eq_ignore_ascii_case(cam)) else {
+        eprintln!("lri-mono: no module {cam} in this frame");
+        return ExitCode::FAILURE;
+    };
+
+    let bytes = match source.read_at(plane.offset, plane.length) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("lri-mono: cannot read the plane: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if (bytes.len() as u64) < plane.length {
+        eprintln!(
+            "lri-mono: plane is short — got {} of {} bytes",
+            bytes.len(),
+            plane.length
+        );
+        return ExitCode::FAILURE;
+    }
+
+    let raw = container::unpack_tenbit(&bytes, plane.width * plane.height);
+    let cfa = plane.cfa();
+    let methods = match &args.methods {
+        Some(list) => list.clone(),
+        None if cfa.is_none() => vec![Method::Native],
+        None => vec![Method::Bin],
+    };
+
+    if let Err(e) = std::fs::create_dir_all(&args.out) {
+        eprintln!("lri-mono: cannot create {}: {e}", args.out.display());
+        return ExitCode::FAILURE;
+    }
+    let stem = args
+        .input
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "lri".into());
+
+    for method in methods {
+        let rendered = match render(
+            plane.width,
+            plane.height,
+            &raw,
+            method,
+            cfa,
+            args.black,
+            args.white,
+        ) {
+            Ok(p) => p,
+            Err(why) => {
+                eprintln!("  {}: {why}", method.name());
+                continue;
+            }
+        };
+        let path = args.out.join(format!("{stem}_{}_{}.png", plane.camera, method.name()));
+        match write_png(&path, &rendered, args.linear, args.stretch) {
+            Ok(()) => println!(
+                "  {} -> {}x{}  {}",
+                method.name(),
+                rendered.w,
+                rendered.h,
+                path.display()
+            ),
+            Err(e) => eprintln!("  {}: {e}", method.name()),
+        }
+    }
+
+    println!(
+        "read {:.1} MB of {:.0} MB",
+        plane.length as f64 / 1.0e6,
+        walked as f64 / 1.0e6
+    );
+    ExitCode::SUCCESS
+}
+
 fn methods_for(args: &Args, mono: bool) -> Vec<Method> {
     match &args.methods {
         Some(list) => list.clone(),
@@ -228,14 +363,14 @@ struct Plane {
 }
 
 fn render(
-    img: &RawImage,
+    w: usize,
+    h: usize,
     raw: &[u16],
     method: Method,
     cfa: Option<&str>,
     black: f32,
     white: f32,
 ) -> Result<Plane, String> {
-    let (w, h) = (img.width, img.height);
     let norm = |v: u16| ((v as f32 - black) / (white - black)).clamp(0.0, 1.0);
 
     let plane = match method {
@@ -383,7 +518,7 @@ fn percentile(px: &[f32], p: f32) -> f32 {
 /// light it actually collected on this frame, and what the factory measured for its
 /// colour response. Run it over a wide frame and a telephoto one and every camera id
 /// is covered — that is the whole array audited from two shots.
-fn print_census(img: &RawImage, raw: &[u16], black: f32) {
+fn print_census(img: &RawImage, raw: &[u16], black: f32, plane: Option<&ModulePlane>) {
     let (w, h) = (img.width, img.height);
     let mut sum = 0f64;
     let mut clipped = 0usize;
@@ -406,6 +541,21 @@ fn print_census(img: &RawImage, raw: &[u16], black: f32) {
         clipped as f64 / (w * h) as f64 * 100.0,
         whitepoints.join(" ")
     );
+
+    // Same scene, same instant, but each module gets its own exposure and gain — so a
+    // raw level says nothing about sensitivity until it is divided by what the module
+    // was actually given.
+    if let Some(p) = plane {
+        let product = p.exposure_gain_product();
+        let normalised = if product > 0.0 { level / product * 1.0e6 } else { 0.0 };
+        println!(
+            "            exposure {:.3} ms  gain {:.2}x{}  ->  level per unit exposure {:.2}",
+            p.exposure_ns as f64 / 1.0e6,
+            p.analog_gain,
+            if p.digital_gain > 1.0 { format!(" (digital {:.2}x)", p.digital_gain) } else { String::new() },
+            normalised
+        );
+    }
 }
 
 /// Mean of each CFA phase. On a colour sensor the two green phases run well
@@ -514,6 +664,8 @@ fn parse_args() -> Result<Option<Args>, String> {
     let mut stretch = false;
     let mut stats = false;
     let mut census = false;
+    let mut peek = None;
+    let mut device = None;
 
     let mut argv = std::env::args().skip(1);
     while let Some(arg) = argv.next() {
@@ -555,12 +707,19 @@ fn parse_args() -> Result<Option<Args>, String> {
             "--stretch" => stretch = true,
             "--stats" => stats = true,
             "--census" => census = true,
+            "--peek" => peek = Some(need(&mut argv, "--peek")?),
+            "--device" => device = Some(need(&mut argv, "--device")?),
             other if other.starts_with('-') => return Err(format!("unknown option '{other}'")),
             other => input = Some(PathBuf::from(other)),
         }
     }
 
-    let input = input.ok_or("no .lri file given")?;
+    let input = match (input, &device) {
+        (Some(p), _) => p,
+        // With --device the file lives on the camera; the local path is only a stem.
+        (None, Some(dev)) => PathBuf::from(dev.rsplit('/').next().unwrap_or("lri")),
+        (None, None) => return Err("no .lri file given".into()),
+    };
     if white <= black {
         return Err("--white must be above --black".into());
     }
@@ -568,7 +727,9 @@ fn parse_args() -> Result<Option<Args>, String> {
         input.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."))
     });
 
-    Ok(Some(Args { input, out, methods, modules, black, white, linear, stretch, stats, census }))
+    Ok(Some(Args {
+        input, out, methods, modules, black, white, linear, stretch, stats, census, peek, device,
+    }))
 }
 
 fn need(argv: &mut impl Iterator<Item = String>, what: &str) -> Result<String, String> {
