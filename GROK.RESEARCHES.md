@@ -111,23 +111,31 @@ Lumen GUI fix · ждать 52 Мп на камере · смешивать PR A
 
 ## Оглавление
 
-| PLAN | Фазы A–D (desktop + камера) | **A done, B1 done** | 2026-08-05 |
+| PLAN | Фазы A–D + Plan Lumen M0–M4 | **A–D done · M0–M4 done** | 2026-08-05 |
 | A1–A3 | libcp harness + compare + forest picks | **DONE** | 2026-08-05 |
+
+**Claude — с чего читать (handoff):**
+
+1. **§ R10** + блок «для Claude» — mono / 13 vs 52 / `RendererProfile`  
+2. **§ R13** + блок «для Claude» — `ParamFloat` 0…19 (FNumber=**0**, FocusDepth=**1**; **3**=ColorTemp)  
+3. **§ Plan Lumen** — desktop status  
+4. **§ R2** — перепроверка A2/C6  
 
 | # | Тема | Статус | Дата |
 | --- | --- | --- | --- |
-| R1 | `libcp.dylib` / `CIAPI` — harness risk-0 | **Create+setInput+render живы**; пиксели пока пустые | 2026-08-05 |
-| R7 | `liblightcalibration.so` + `/lightcal/*` (read-only adb) | строки + factory LRI сняты | 2026-08-05 |
+| R1 | `libcp.dylib` / `CIAPI` — harness risk-0 | **DONE** pixels + M0–M4 product path | 2026-08-05 |
 | R2 | Монохромные модули A2/C6 — повторный аудит | **факт** + живой прогон 05.08 | 2026-08-05 |
 | R3 | Перепись 16 матриц, уровни, census | закрыто → `open-questions.md` | 2026-08-04 |
 | R4 | JPEG на камере = прокси 1.5 Мп | закрыто → `open-questions.md` | 2026-08-04 |
 | R5 | Гимбал DJI RS4 Mini (HID VOLUME_UP) | спуск работает | 2026-08-04 |
 | R6 | Видео: 40 к/с, 4K UHD, high-профиль | открыто | 2026-08-03 |
+| R7 | `liblightcalibration.so` + `/lightcal/*` (read-only adb) | строки + factory LRI сняты | 2026-08-05 |
 | R8 | Lumen 2.3.0.606 не стартует на Apple Silicon Mac | **причина + workaround** | 2026-08-05 |
 | R9 | Desktop-репо **luminat** (цель фазы 2) | clone + карта | 2026-08-05 |
-| R10 | Fusion/13 vs 52 Мп / роль mono — синтез luminat+libcp | **для Claude** | 2026-08-05 |
+| R10 | Fusion/13 vs 52 Мп / роль mono — синтез luminat+libcp | **handoff → Claude canon** | 2026-08-05 |
 | R11 | Лесные снимки с камеры — визуальный отбор для fusion/mono | picks | 2026-08-05 |
 | R12 | Lumen SIGSEGV ImagePlaneNode::attachToWindow | **разобран** | 2026-08-05 |
+| R13 | CIAPI ParamFloat name table + tone/DOF props | **DONE** table 0..19 + live get/set | 2026-08-05 |
 
 ---
 
@@ -1316,13 +1324,13 @@ Tauri `lumen`: **LibCP quality** button (`libcp_lri` command), mono export butto
 | **M1** | libcp-first viewer + export JPEG + fuse hidden | **done** |
 | **M2** | camera pull + batch + cache | **done** |
 | **M3** | .app + setup wizard + zoom/pan | **done** `make package-macos` |
-| M4 | refocus/depth | **done** 2026-08-05 — ParamFloat FNumber=3 / FocusDepth=1; DepthEditor pre-setInput, DESKTOP only; UI aperture + Alt+click + depth map |
+| M4 | refocus/depth | **done** 2026-08-05 — ParamFloat FNumber=**0** / FocusDepth=**1** (R13: id 3 = ColorTemp, not FNumber); DepthEditor pre-setInput, DESKTOP only; UI aperture + Alt+click + depth map |
 
 ### M4 smoke (2026-08-05, L16_00026)
 
 | Check | Result |
 | --- | --- |
-| `setProperty(ParamFloat,3)=2.5` @ p1 | get → 2.50; 4160×3120 JPEG |
+| `setProperty(ParamFloat,0)=4` FNumber @ p3 (auto-upgrade) | get → 4; 10432×7824 JPEG (R13 fix; early M4 wrongly used id 3) |
 | DepthEditor after setInput | **throws** `Cannot set DepthEditor after setInputDataStream!` |
 | DepthEditor @ p1 | **throws** `… only … Desktop profile!` |
 | DepthEditor pre-setInput @ p3 | ok; `getDepthAtPoint(0.5,0.4)` → **16828.9 mm** |
@@ -1456,6 +1464,77 @@ Live pair **not** required to close D — protocol + strings + extract are enoug
 - Quality offline: `light libcp --profile 1` (fast) or `--profile 3` (desktop canvas).  
 - **Не** ждать writeImage / починки Lumen Qt.
 
+---
+
+## R13. CIAPI `ParamFloat` property bag (tone + DOF) — 2026-08-05
+
+**Зачем.** Следующий Lumen-like слой после refocus: exposure / WB / contrast без Qt.
+**Источник имён:** gallery `libnative-lib.so` `TraceRenderer` — таблица указателей на
+строки (ELF `.rela.dyn` @ VA `0x2d5b0`, 20× `char*`).
+
+### ParamFloat index → name (проверено reloc)
+
+| id | Name | Live default (L16_00026, p1, after setInput) | set/get round-trip |
+| -- | --- | --- | --- |
+| **0** | **ViewDofFNumber** | **15.22** | set 4 → get 4; p1 then throws *This profile does not support depth!* |
+| **1** | **ViewDofFocusDepth** | **-1** | set before depth → *Depth not available yet!* |
+| **2** | **ViewExposure** | 0 | set 0.5 → 0.5 **OK** |
+| **3** | **ViewColorTemperature** | **6101.9** (K) | set 5500 → 5500 **OK** |
+| **4** | **ViewColorTint** | 13.3 | set 0 → 0 **OK** |
+| **5** | ViewShadowBoost | 0 | OK |
+| **6** | ViewHighlightBoost | 0 | OK |
+| **7** | **ViewContrast** | 0 | set 0.25 → 0.25 **OK** |
+| **8** | **ViewSaturation** | 0 | set −0.2 → −0.2 **OK** |
+| **9** | **ViewVibrance** | 0 | OK |
+| **10** | **ViewClarity** | 0 | OK |
+| **11** | ViewBlacks | 0 | OK |
+| **12** | ViewWhites | 0 | OK |
+| **13** | **ViewSharpening** | 0 | set 0.5 → 0.5 **OK** |
+| 14 | PreferredMinimumFNumber | (read) | — |
+| 15 | PreferredFocusDepth | (read; after depth) | — |
+| 16 | PreferredMaximumFNumber | (read) | — |
+| 17 | CaptureExposureTime | capture meta | — |
+| 18 | CaptureEvOffset | capture meta | — |
+| 19 | MaximumInFocusBlurPixels | — | — |
+
+**Команда probe:** x86_64 Rosetta helper against Lumen `libcp.dylib` 0.26.3  
+(`setProperty`/`getProperty` ParamFloat after `Create`+`setInput` on `L16_00026.lri`).
+
+### EditProperty → ParamFloat (`toParamFloat`, native-lib)
+
+```
+toParamFloat(editId):  // editId 1..13; 0 or >13 → -1
+table: 1→3, 2→4, 3→9, 4→8, 5→2, 6→7, 7→5, 8→6, 9→13, 10→0, 11→14, 12→16, 13→1
+```
+
+`nativeSetDofDepth` hardcodes **ParamFloat(1)** (FocusDepth) + range check vs PreferredFocusDepthRange array.
+
+### Баг M4 (исправлен 05.08)
+
+Helper раньше ставил **FNumber = ParamFloat(3)** — это **ColorTemperature**, не aperture.
+Правильно: **FNumber = 0**, FocusDepth = 1.  
+DOF (FNumber/Focus) на **profile 1** → exception *does not support depth* → helper теперь
+**upgrade to profile 3** + `try/catch` around setProperty.
+
+### Tone props (product next)
+
+Живые без depth: **Exposure, Contrast, Saturation, Vibrance, Clarity, Sharpening,
+ColorTemperature, ColorTint, Shadow/Highlight/Blacks/Whites**.  
+Можно вешать слайдеры в Luminat без DESKTOP.
+
+### MonoFusion
+
+`nm` macOS `libcp.dylib`: **нет** экспорта `lt::MonoFusion::*` (internal only).  
+Путь mono product через публичный CIAPI **не найден** в этой сессии — по-прежнему strings +
+gallery pipeline.
+
+### для Claude
+
+- Таблица ParamFloat 0..19 — канон для любого on-device gallery JNI mirror.
+- Aperture/DOF ≠ tone; DOF требует depth-capable profile (DESKTOP / device depth path).
+- M4 desktop: FNumber index **0**, не 3.
+
+---
 
 ## Как дополнять этот файл
 
@@ -1465,3 +1544,4 @@ Live pair **not** required to close D — protocol + strings + extract are enoug
 4. Находки, полезные Claude, помечать блоком **«для Claude»** — готовая формулировка
    на вливание, без правки его файлов.
 5. Код, smali, база знаний Claude — вне компетенции этого журнала.
+
