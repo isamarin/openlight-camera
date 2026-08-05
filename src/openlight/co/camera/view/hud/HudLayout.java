@@ -17,6 +17,8 @@ import java.util.EnumMap;
 import openlight.co.camera.CameraApp;
 import openlight.co.camera.CameraInfo;
 import openlight.co.camera.CameraMode;
+import openlight.co.camera.managers.mono.MonoMode;
+import openlight.co.camera.utils.CamPrefsUtils;
 import openlight.co.camera.enums.OrientationConfig;
 import openlight.co.camera.listener.OrientationListener;
 import openlight.co.camera.managers.CameraManager;
@@ -117,7 +119,16 @@ public class HudLayout extends ControlManager implements OrientationListener {
         return Integer.toString(Constants.SensitivityValues.forIndex(index).getSensitivityVal());
     }
 
+    /** 4160x3120 of a single panchromatic module, rounded the way the HUD counts. */
+    private static final int MONO_PLANE_MEGAPIXELS = 13;
+
     private String createResolutionValue() {
+        // In mono raw the number that matters is the panchromatic plane, not what the
+        // fusion would have produced: one module, 4160x3120, no interpolation. Saying
+        // 52+ here would advertise a frame this mode is not asking the camera to build.
+        if (MonoMode.isActive()) {
+            return String.valueOf(MONO_PLANE_MEGAPIXELS);
+        }
         float zoom = mCamPref.getFloatValue("zoom_value");
         int res = mCameraInfo.getFinalCaptureResolution(zoom);
         if (res > 0x34) return mHighResolutionImageValue;
@@ -242,7 +253,20 @@ public class HudLayout extends ControlManager implements OrientationListener {
             data.getHudElementUnitTop().setVisibility(View.GONE);
         }
         primaryUnit.setVisibility(View.VISIBLE);
-        primaryUnit.setText(data.getHudUnitText());
+        primaryUnit.setText(unitTextFor(hudValue, data.getHudUnitText()));
+    }
+
+    /**
+     * Names the module doing the recording next to the resolution, so the mode says
+     * which of the two panchromatic sensors the frame will come from — A2 at the wide
+     * end, C6 at the long one.
+     */
+    private String unitTextFor(HudValue hudValue, String unit) {
+        if (hudValue != HudValue.RESOLUTION || !MonoMode.isActive()) {
+            return unit;
+        }
+        float lensFocal = mCamPref.getFloatValue(CamPrefsUtils.CAM_FOCAL_LENGTH);
+        return unit + "·" + MonoMode.moduleFor(lensFocal * 10.0f);
     }
 
     private void updateHudIndividualValue(HudValue hudValue) {
