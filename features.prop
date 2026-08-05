@@ -17,6 +17,10 @@ restart.on.error=true
 # Enable CLI test-intent support (default: true)
 feature.cli_support=true
 
+# Deliberately throw once at startup to prove the trace file works (default: false).
+# The app is expected to die; the trace lands in /sdcard/openlight-crash.log.
+#crash.selftest=true
+
 # --- Monochrome ---
 # True monochrome support (default: true). Modules A2 and C6 carry an AR1335 with no
 # colour filter array; they ride with the 28 mm and 150 mm groups respectively, so the

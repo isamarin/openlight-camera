@@ -13,6 +13,7 @@ import openlight.co.lib.utils.FeatureManager;
 import openlight.co.lib.utils.LifecycleLogger;
 import openlight.co.lib.utils.LockStateHelper;
 import openlight.co.lib.utils.Utils;
+import openlight.co.camera.utils.CrashTrace;
 import openlight.co.camera.utils.Util;
 
 public class CameraActivity extends BaseActivity {
@@ -85,6 +86,9 @@ public class CameraActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Light's reporter deletes the trace when it cannot reach a server that has been
+        // gone since 2019, which leaves System.exit(2) as the only evidence of a crash.
+        CrashTrace.install();
         FeatureManager.reload(this);
         mLockStateHelper.register(this);
         getWindow().addFlags(0x80000);
@@ -115,6 +119,8 @@ public class CameraActivity extends BaseActivity {
     @Override
     public void onResume() {
         super.onResume();
+        // Re-assert ourselves: BaseActivity hands the default handler to HockeyApp here.
+        CrashTrace.install();
         mOrientationListener.enable();
         Utils.get().updateLockedState();
     }
