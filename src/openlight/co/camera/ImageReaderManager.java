@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import openlight.co.camera.listener.OnImageSavedListener;
+import openlight.co.camera.managers.mono.MonoMode;
+import openlight.co.camera.managers.mono.MonoProxy;
 import openlight.co.camera.managers.CameraManager;
 import openlight.co.camera.utils.CamPrefsUtils;
 import openlight.co.camera.utils.ExecutorUtil;
@@ -328,6 +330,13 @@ public class ImageReaderManager {
                     @Override
                     public void onSaved(String path, int orientation) {
                         LogUtil.i(TAG, "Image saved path: " + path);
+                        // The proxy is what a person looks at right after the shutter, so in
+                        // this mode it has to agree with the frame that was actually taken —
+                        // the panchromatic plane in the container, not a colour rendering of
+                        // modules that were never the point. Done before the gallery is told.
+                        if (MonoMode.isActive()) {
+                            MonoProxy.greyInPlace(path);
+                        }
                         if (mOnImageStatusListener != null) {
                             mOnImageStatusListener.onImageSaved(format, path, orientation);
                         }
