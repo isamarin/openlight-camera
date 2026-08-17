@@ -24,3 +24,13 @@ work/
 
 # rust tooling
 scripts/lri-mono/target/
+
+# локальный мусор и настройки среды
+.DS_Store
+.mcp.json
+openlight-camera.iml
+.understand-anything/
+core
+
+# вендорная документация — не наша, распространять решает владелец
+Light-L16-User-Manual.pdf
