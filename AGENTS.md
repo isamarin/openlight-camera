@@ -36,6 +36,7 @@
 | [open-questions.md](open-questions.md) | **главный** — всё открытое, разбито по тому, чем закрывается |
 | [hidden-features.md](hidden-features.md) | инвентарь того, что Light собрала и выключила |
 | [monochrome.md](monochrome.md) | монохромные модули, измерения, развилка по архитектуре |
+| [calibration.md](calibration.md) | раздел `/lightcal`: зеркала, вспышка, заводские протоколы |
 | [questions-for-light.md](questions-for-light.md) | что спрашивать у бывшей команды Light, а что закрывать самим |
 | [scripts/lri-mono/README.md](scripts/lri-mono/README.md) | инструмент и методы извлечения |
 | `log/` | журнал сессий: что менялось и почему |
