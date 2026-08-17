@@ -1,0 +1,22 @@
+{
+     "CoolWhite": {
+          "CCT": 5285.076534253325,
+          "Spectrum": [],
+          "date_time": "October_31_2017_14h_50min_47s",
+          "duration": 1000,
+          "lux": 342.3443925364388,
+          "mAmpCurrentSetting": 250,
+          "mode": "torch"
+     },
+     "Slot": 1,
+     "WarmWhite": {
+          "CCT": 2194.1175895552037,
+          "Spectrum": [],
+          "date_time": "October_31_2017_14h_50min_49s",
+          "duration": 1000,
+          "lux": 284.9053190012498,
+          "mAmpCurrentSetting": 250,
+          "mode": "torch"
+     },
+     "date_time": "10/31/2017, 14:50:49"
+}

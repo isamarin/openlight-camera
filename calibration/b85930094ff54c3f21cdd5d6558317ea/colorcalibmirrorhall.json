@@ -1,0 +1,107 @@
+{
+    "date_time": "Mon Oct 30 15:17:20 2017\n",
+    "B1": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "810",
+        "inward": {
+            "mirror_hall": 856,
+            "mirror_angle": 45.07225036621094
+        },
+        "outward": {
+            "mirror_hall": 371,
+            "mirror_angle": 35.64200210571289
+        }
+    },
+    "B2": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "774",
+        "inward": {
+            "mirror_hall": 794,
+            "mirror_angle": 44.69425582885742
+        },
+        "outward": {
+            "mirror_hall": 342,
+            "mirror_angle": 35.556880950927737
+        }
+    },
+    "B3": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "821",
+        "inward": {
+            "mirror_hall": 818,
+            "mirror_angle": 44.79716491699219
+        },
+        "outward": {
+            "mirror_hall": 348,
+            "mirror_angle": 35.428741455078128
+        }
+    },
+    "B5": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "929",
+        "inward": {
+            "mirror_hall": 911,
+            "mirror_angle": 44.73527526855469
+        },
+        "outward": {
+            "mirror_hall": 475,
+            "mirror_angle": 35.71483612060547
+        }
+    },
+    "C1": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "479",
+        "inward": {
+            "mirror_hall": 567,
+            "mirror_angle": 46.45039749145508
+        },
+        "outward": {
+            "mirror_hall": 190,
+            "mirror_angle": 39.933170318603519
+        }
+    },
+    "C2": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "460",
+        "inward": {
+            "mirror_hall": 641,
+            "mirror_angle": 46.88418197631836
+        },
+        "outward": {
+            "mirror_hall": 234,
+            "mirror_angle": 40.170841217041019
+        }
+    },
+    "C3": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "532",
+        "inward": {
+            "mirror_hall": 731,
+            "mirror_angle": 46.64457321166992
+        },
+        "outward": {
+            "mirror_hall": 308,
+            "mirror_angle": 40.026702880859378
+        }
+    },
+    "C4": {
+        "is_success": "True",
+        "failure_msg": "NA",
+        "hall_code": "744",
+        "inward": {
+            "mirror_hall": 785,
+            "mirror_angle": 46.648685455322269
+        },
+        "outward": {
+            "mirror_hall": 365,
+            "mirror_angle": 39.73115539550781
+        }
+    }
+}

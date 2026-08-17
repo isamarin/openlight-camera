@@ -1,0 +1,24 @@
+Light L16 — заводская калибровка, снятая с камеры
+
+серийник    LFCLHMB7C0700105
+модель      L16
+прошивка    00WW_1_351
+uuid        7c40d55f6429acc23441ce52ed0bc756
+отпечаток   70a9606d58c6035a
+снято       2026-08-17T18:17:42Z
+
+Отпечаток — хэш заводской геометрии. Та же геометрия едет в каждом .lri,
+а серийника в кадре нет вовсе, так что отпечаток — единственный способ
+потом узнать, каким аппаратом снят кадр из архива:
+    lri-mono кадр.lri --fingerprint
+
+Файлы (суммы — в SHA256SUMS):
+  asic_calib_v1.lri              9884 Б
+  asic_calib_v1.lri.md5          52 Б
+  calibration.lri                333048 Б
+  calibration.lri.md5            50 Б
+  hotpixel.rec                   31020168 Б
+  hotpixel.rec.md5               47 Б
+  uuid.txt                       32 Б
+  zoom_calib_v0.lri              6232 Б
+  zoom_calib_v0.lri.md5          52 Б
