@@ -307,6 +307,7 @@ fn run_peek(args: &Args, cam: &str) -> ExitCode {
         sum / raw.len() as f64,
         clipped as f64 / raw.len() as f64 * 100.0
     );
+    print_tiled_cfa_test(plane.width, plane.height, &raw, args.black);
     let methods = match &args.methods {
         Some(list) => list.clone(),
         None if cfa.is_none() => vec![Method::Native],
@@ -615,7 +616,7 @@ fn print_stats(img: &RawImage, raw: &[u16], black: f32, white: f32) {
         means[0], means[1], means[2], means[3]
     );
 
-    print_tiled_cfa_test(img, raw, black);
+    print_tiled_cfa_test(img.width, img.height, raw, black);
 }
 
 /// Whole-frame phase means can be fooled by a neutral scene: average enough of
@@ -623,9 +624,8 @@ fn print_stats(img: &RawImage, raw: &[u16], black: f32, white: f32) {
 /// per 64x64 tile and reports the distribution, so a single coloured patch
 /// anywhere in the frame gives a CFA sensor away. Spread is normalised by the
 /// tile's own level, so it reads as a fraction of signal rather than counts.
-fn print_tiled_cfa_test(img: &RawImage, raw: &[u16], black: f32) {
+fn print_tiled_cfa_test(w: usize, h: usize, raw: &[u16], black: f32) {
     const TILE: usize = 64;
-    let (w, h) = (img.width, img.height);
 
     let mut spreads: Vec<f32> = Vec::new();
     for ty in 0..h / TILE {
