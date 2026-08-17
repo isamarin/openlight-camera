@@ -385,3 +385,86 @@ pub fn read_calibration(src: &dyn Source) -> io::Result<Vec<ModuleCalibration>> 
 
     Ok(out)
 }
+
+/// One hot-pixel characterisation: the factory swept exposure, temperature and gain,
+/// and recorded where the sensor lied at each setting.
+pub struct HotPixelRun {
+    pub camera: String,
+    pub exposure_us: u32,
+    pub temperature: i32,
+    pub gain: f32,
+    pub variance: Option<f32>,
+    pub threshold: Option<f32>,
+    pub data_offset: u64,
+    pub data_size: u32,
+}
+
+/// Read the hot-pixel measurements out of `hotpixel.rec`.
+///
+/// The file is an ordinary LELR block, but an unusual one: the payload comes first and
+/// the protobuf message sits at the very end, which is why the header points 29 MB in.
+/// Each measurement names a range of that payload; the ranges are zlib streams.
+pub fn read_hot_pixels(src: &dyn Source) -> io::Result<(Vec<HotPixelRun>, u64)> {
+    let mut runs = Vec::new();
+    let mut pos = 0u64;
+
+    loop {
+        let header = src.read_at(pos, HEADER_LEN)?;
+        if header.len() < HEADER_LEN as usize || &header[..4] != MAGIC {
+            break;
+        }
+        let block_length = u64::from_le_bytes(header[4..12].try_into().unwrap());
+        let message_offset = u64::from_le_bytes(header[12..20].try_into().unwrap());
+        let message_length = u32::from_le_bytes(header[20..24].try_into().unwrap()) as u64;
+        if block_length == 0 {
+            break;
+        }
+
+        if header[24] == MSG_LIGHT_HEADER && message_length > 0 {
+            let msg = src.read_at(pos + message_offset, message_length)?;
+            if let Ok(light) = LightHeader::parse_from_bytes(&msg) {
+                for cal in light.module_calibration {
+                    let camera = format!("{:?}", cal.camera_id());
+                    if let Some(map) = cal.hot_pixel_map.as_ref() {
+                        for m in &map.data {
+                            runs.push(HotPixelRun {
+                                camera: camera.clone(),
+                                exposure_us: m.data_exposure(),
+                                temperature: m.sensor_temparature(),
+                                gain: m.sensor_gain(),
+                                variance: m.pixel_variance,
+                                threshold: m.threshold,
+                                data_offset: pos + m.data_offset(),
+                                data_size: m.data_size(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        pos += block_length;
+    }
+
+    Ok((runs, pos))
+}
+
+/// Inflate one measurement into a full-resolution defect map.
+///
+/// Each measurement begins with 20 bytes of its own: a checksum, the compressed length,
+/// then the width and height. What follows is a zlib stream that expands to one byte per
+/// pixel — a severity per photosite, not a yes/no mask.
+pub fn inflate_run(src: &dyn Source, run: &HotPixelRun) -> io::Result<(Vec<u8>, u32, u32)> {
+    use flate2::read::ZlibDecoder;
+    const REC_HEADER: usize = 20;
+
+    let raw = src.read_at(run.data_offset, run.data_size as u64)?;
+    if raw.len() < REC_HEADER {
+        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "hot pixel record is short"));
+    }
+    let width = u32::from_le_bytes(raw[12..16].try_into().unwrap());
+    let height = u32::from_le_bytes(raw[16..20].try_into().unwrap());
+
+    let mut out = Vec::new();
+    ZlibDecoder::new(&raw[REC_HEADER..]).read_to_end(&mut out)?;
+    Ok((out, width, height))
+}

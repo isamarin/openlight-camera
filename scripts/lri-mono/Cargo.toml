@@ -7,6 +7,7 @@ edition = "2021"
 lri-rs = { git = "https://github.com/gennyble/lri-rs", rev = "91365deccbfd1d5686ff62d77d9dea6937fcdb4d" }
 lri-proto = { git = "https://github.com/gennyble/lri-rs", rev = "91365deccbfd1d5686ff62d77d9dea6937fcdb4d" }
 png = "0.17"
+flate2 = "1"
 
 [profile.release]
 opt-level = 3

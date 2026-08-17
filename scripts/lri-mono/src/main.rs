@@ -85,6 +85,9 @@ struct Args {
     stats: bool,
     census: bool,
     calib: bool,
+    hotpixels: bool,
+    raw: bool,
+    fingerprint: bool,
     peek: Option<String>,
     device: Option<String>,
 }
@@ -103,6 +106,9 @@ lri-mono <file.lri> [options]
   --stats            per-module numbers, including the CFA phase test
   --census           one line per module: sensor, mosaic, light collected, colour profile
   --calib            dump the factory calibration: geometry, mirrors, per module
+  --hotpixels        read hotpixel.rec: the factory sweep of hot pixels per module
+  --raw              also write the untouched sensor values as 16-bit little-endian
+  --fingerprint      identify the camera a frame came from, by its factory geometry
   --peek CAM         read only that module's plane instead of the whole file
   --device PATH      peek at a file on the camera over adb, e.g.
                      --peek A2 --device /sdcard/DCIM/Camera/L16_00145.lri
@@ -120,6 +126,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if args.fingerprint {
+        return run_fingerprint(&args);
+    }
+
+    if args.hotpixels {
+        return run_hotpixels(&args);
+    }
 
     if args.calib {
         return run_calib(&args);
@@ -299,6 +313,25 @@ fn run_peek(args: &Args, cam: &str) -> ExitCode {
     let raw = container::unpack_tenbit(&bytes, plane.width * plane.height);
     let cfa = plane.cfa();
 
+    // Sensor values as they came off the ASIC — no black level, no scaling, no curve.
+    // Stacking and defect work want the numbers, not a picture of them.
+    if args.raw {
+        if let Err(e) = std::fs::create_dir_all(&args.out) {
+            eprintln!("lri-mono: cannot create {}: {e}", args.out.display());
+            return ExitCode::FAILURE;
+        }
+        let stem = args.input.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+        let path = args.out.join(format!("{stem}_{}_{}x{}_u16le.raw", plane.camera, plane.width, plane.height));
+        let mut bytes = Vec::with_capacity(raw.len() * 2);
+        for v in raw.iter() {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        match std::fs::write(&path, &bytes) {
+            Ok(()) => println!("  raw -> {}", path.display()),
+            Err(e) => eprintln!("lri-mono: cannot write {}: {e}", path.display()),
+        }
+    }
+
     // Worth knowing before walking away from the tripod: a panchromatic module collects
     // about a stop more than its colour neighbours, so metering done on them clips it.
     let mut sum = 0f64;
@@ -365,6 +398,137 @@ fn run_peek(args: &Args, cam: &str) -> ExitCode {
         plane.length as f64 / 1.0e6,
         walked as f64 / 1.0e6
     );
+    ExitCode::SUCCESS
+}
+
+/// Identify the camera a frame came from.
+///
+/// An `.lri` names no serial and no uuid, so a frame separated from its camera looks
+/// anonymous. It is not: every frame carries the factory geometry, and that geometry is
+/// per-unit — between our two cameras the intrinsics differ by 160 px on average. Hashing
+/// them gives a stable identifier, so an archive of orphaned frames can be sorted by the
+/// camera that shot them, and matched to the right calibration set.
+fn run_fingerprint(args: &Args) -> ExitCode {
+    let source: Box<dyn Source> = match &args.device {
+        Some(path) => Box::new(AdbSource::new(path.clone())),
+        None => Box::new(LocalSource::new(args.input.to_string_lossy().into_owned())),
+    };
+
+    let cals = match container::read_calibration(source.as_ref()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("lri-mono: cannot read {}: {e}", source.name());
+            return ExitCode::FAILURE;
+        }
+    };
+    if cals.is_empty() {
+        eprintln!("lri-mono: no factory calibration in {}", source.name());
+        return ExitCode::FAILURE;
+    }
+
+    // One entry per module, in a fixed order, so the same camera always hashes the same.
+    let mut rows: Vec<(String, [f32; 4])> = Vec::new();
+    for c in &cals {
+        let Some(k) = c.k_mat else { continue };
+        if rows.iter().any(|(m, _)| *m == c.camera) {
+            continue;
+        }
+        rows.push((c.camera.clone(), [k[0], k[4], k[2], k[5]]));
+    }
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // FNV-1a over the intrinsics: no dependency, and stable across runs and machines.
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for (m, v) in &rows {
+        for byte in m.as_bytes().iter().copied().chain(v.iter().flat_map(|f| f.to_le_bytes())) {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+
+    println!("{}: camera fingerprint {:016x}  ({} modules)", source.name(), hash, rows.len());
+    for (m, v) in &rows {
+        println!("  {:<4} fx {:>9.1}  fy {:>9.1}  cx {:>8.1}  cy {:>8.1}", m, v[0], v[1], v[2], v[3]);
+    }
+    ExitCode::SUCCESS
+}
+
+/// Report the factory hot-pixel sweep.
+///
+/// The camera knows which of its pixels lie, and it knows it as a function of exposure,
+/// temperature and gain — the factory measured all three. For long exposures that is the
+/// difference between stars and sensor defects, so it is worth having outside the camera.
+fn run_hotpixels(args: &Args) -> ExitCode {
+    let source: Box<dyn Source> = match &args.device {
+        Some(path) => Box::new(AdbSource::new(path.clone())),
+        None => Box::new(LocalSource::new(args.input.to_string_lossy().into_owned())),
+    };
+
+    let (runs, walked) = match container::read_hot_pixels(source.as_ref()) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("lri-mono: cannot read {}: {e}", source.name());
+            return ExitCode::FAILURE;
+        }
+    };
+    if runs.is_empty() {
+        eprintln!("lri-mono: no hot pixel measurements in {}", source.name());
+        return ExitCode::FAILURE;
+    }
+
+    let payload: u64 = runs.iter().map(|r| r.data_size as u64).sum();
+    let mut ids: Vec<&str> = runs.iter().map(|r| r.camera.as_str()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    println!(
+        "{}: {} measurements over {} modules, {:.1} MB of {:.1} MB is measurement data",
+        source.name(),
+        runs.len(),
+        ids.len(),
+        payload as f64 / 1.0e6,
+        walked as f64 / 1.0e6
+    );
+
+    println!(
+        "\n  {:<4} {:>12} {:>7} {:>7} {:>9} {:>11}",
+        "mod", "exposure", "temp", "gain", "thresh", "size"
+    );
+    for r in &runs {
+        println!(
+            "  {:<4} {:>9.1} ms {:>6}C {:>7.2} {:>9} {:>8.1} KB",
+            r.camera,
+            r.exposure_us as f64 / 1000.0,
+            r.temperature,
+            r.gain,
+            r.threshold.map(|t| format!("{t:.1}")).unwrap_or_else(|| "-".into()),
+            r.data_size as f64 / 1000.0
+        );
+    }
+
+    // Inflate them all: the useful number is how many photosites the factory gave up on.
+    println!("\n  {:<4} {:>12} {:>12} {:>10} {:>9}", "mod", "map", "flagged", "severe", "dead");
+    for r in &runs {
+        match container::inflate_run(source.as_ref(), r) {
+            Ok((map, w, h)) => {
+                let flagged = map.iter().filter(|v| **v > 0).count();
+                let severe = map.iter().filter(|v| **v >= 16).count();
+                let dead = map.iter().filter(|v| **v == 255).count();
+                println!(
+                    "  {:<4} {:>5}x{:<6} {:>7} {:>4.1}% {:>7} {:>4.2}% {:>8}",
+                    r.camera,
+                    w,
+                    h,
+                    flagged,
+                    flagged as f64 / map.len() as f64 * 100.0,
+                    severe,
+                    severe as f64 / map.len() as f64 * 100.0,
+                    dead
+                );
+            }
+            Err(e) => eprintln!("  {}: inflate failed: {e}", r.camera),
+        }
+    }
+
     ExitCode::SUCCESS
 }
 
@@ -777,6 +941,9 @@ fn parse_args() -> Result<Option<Args>, String> {
     let mut stats = false;
     let mut census = false;
     let mut calib = false;
+    let mut hotpixels = false;
+    let mut raw_out = false;
+    let mut fingerprint = false;
     let mut peek = None;
     let mut device = None;
 
@@ -821,6 +988,9 @@ fn parse_args() -> Result<Option<Args>, String> {
             "--stats" => stats = true,
             "--census" => census = true,
             "--calib" => calib = true,
+            "--hotpixels" => hotpixels = true,
+            "--raw" => raw_out = true,
+            "--fingerprint" => fingerprint = true,
             "--peek" => peek = Some(need(&mut argv, "--peek")?),
             "--device" => device = Some(need(&mut argv, "--device")?),
             other if other.starts_with('-') => return Err(format!("unknown option '{other}'")),
@@ -842,7 +1012,7 @@ fn parse_args() -> Result<Option<Args>, String> {
     });
 
     Ok(Some(Args {
-        input, out, methods, modules, black, white, linear, stretch, stats, census, calib, peek, device,
+        input, out, methods, modules, black, white, linear, stretch, stats, census, calib, hotpixels, raw: raw_out, fingerprint, peek, device,
     }))
 }
 
