@@ -101,13 +101,14 @@ for m in "$OUT"/*.md5; do
     fi
 done
 
-# Отпечаток камеры по заводской геометрии. Он же считается с любого кадра, и
-# только этим кадр и привязывается к своей калибровке: серийника в .lri нет.
+# Отпечаток камеры по заводской геометрии. Кадр несёт uuid своей камеры сам
+# (device_unique_id_low/high в LightHeader), а отпечаток — независимая проверка
+# того, что калибровка действительно та самая, а не просто помечена нужным uuid.
 FINGERPRINT=""
 for cand in "$(dirname "$0")/lri-mono/target/release/lri-mono" "$(command -v lri-mono || true)"; do
     if [ -n "$cand" ] && [ -x "$cand" ] && [ -f "$OUT/calibration.lri" ]; then
         FINGERPRINT=$("$cand" "$OUT/calibration.lri" --fingerprint 2>/dev/null |
-                      sed -n 's/.*camera fingerprint \([0-9a-f]*\).*/\1/p')
+                      sed -n 's/.*geometry fingerprint \([0-9a-f]*\).*/\1/p')
         break
     fi
 done
@@ -130,9 +131,9 @@ done
     fi
     echo "снято       $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo
-    echo "Отпечаток — хэш заводской геометрии. Та же геометрия едет в каждом .lri,"
-    echo "а серийника в кадре нет вовсе, так что отпечаток — единственный способ"
-    echo "потом узнать, каким аппаратом снят кадр из архива:"
+    echo "Кадр из архива называет свою камеру сам: uuid лежит в LightHeader и совпадает"
+    echo "с uuid.txt этого набора. Отпечаток — хэш заводской геометрии, независимая"
+    echo "проверка того, что набор действительно принадлежит камере:"
     echo "    lri-mono кадр.lri --fingerprint"
     echo
     echo "Файлы (суммы — в SHA256SUMS):"

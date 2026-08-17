@@ -468,3 +468,62 @@ pub fn inflate_run(src: &dyn Source, run: &HotPixelRun) -> io::Result<(Vec<u8>, 
     ZlibDecoder::new(&raw[REC_HEADER..]).read_to_end(&mut out)?;
     Ok((out, width, height))
 }
+
+/// The camera a file came from, as the file itself states it.
+///
+/// `LightHeader` carries `device_unique_id_low` / `device_unique_id_high`, and the two
+/// concatenated low-then-high in hex are exactly the `uuid.txt` of the `/lightcal`
+/// partition. So a frame is not anonymous after all: it names its camera outright, and
+/// the name matches the calibration set byte for byte.
+pub struct DeviceIdentity {
+    pub uuid: Option<String>,
+    pub model: Option<String>,
+    pub firmware: Option<String>,
+    pub asic_firmware: Option<String>,
+}
+
+pub fn read_identity(src: &dyn Source) -> io::Result<DeviceIdentity> {
+    let mut id = DeviceIdentity { uuid: None, model: None, firmware: None, asic_firmware: None };
+    let mut pos = 0u64;
+
+    loop {
+        let header = src.read_at(pos, HEADER_LEN)?;
+        if header.len() < HEADER_LEN as usize || &header[..4] != MAGIC {
+            break;
+        }
+        let block_length = u64::from_le_bytes(header[4..12].try_into().unwrap());
+        let message_offset = u64::from_le_bytes(header[12..20].try_into().unwrap());
+        let message_length = u32::from_le_bytes(header[20..24].try_into().unwrap()) as u64;
+        if block_length == 0 {
+            break;
+        }
+
+        if header[24] == MSG_LIGHT_HEADER && message_length > 0 {
+            let msg = src.read_at(pos + message_offset, message_length)?;
+            if let Ok(light) = LightHeader::parse_from_bytes(&msg) {
+                if id.uuid.is_none() {
+                    if let (Some(lo), Some(hi)) =
+                        (light.device_unique_id_low, light.device_unique_id_high)
+                    {
+                        id.uuid = Some(format!("{lo:016x}{hi:016x}"));
+                    }
+                }
+                if id.model.is_none() {
+                    id.model = light.device_model_name.clone();
+                }
+                if id.firmware.is_none() {
+                    id.firmware = light.device_fw_version.clone();
+                }
+                if id.asic_firmware.is_none() {
+                    id.asic_firmware = light.device_asic_fw_version.clone();
+                }
+                if id.uuid.is_some() && id.model.is_some() && id.firmware.is_some() {
+                    break;
+                }
+            }
+        }
+        pos += block_length;
+    }
+
+    Ok(id)
+}

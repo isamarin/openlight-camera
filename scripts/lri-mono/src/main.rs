@@ -447,7 +447,22 @@ fn run_fingerprint(args: &Args) -> ExitCode {
         }
     }
 
-    println!("{}: camera fingerprint {:016x}  ({} modules)", source.name(), hash, rows.len());
+    // The file's own answer comes first; the geometry hash is the cross-check.
+    match container::read_identity(source.as_ref()) {
+        Ok(id) => {
+            println!(
+                "{}: device uuid {}",
+                source.name(),
+                id.uuid.as_deref().unwrap_or("(не записан)")
+            );
+            if let Some(m) = &id.model {
+                let fw = id.firmware.as_deref().unwrap_or("?");
+                println!("  {m}   прошивка {fw}");
+            }
+        }
+        Err(e) => eprintln!("lri-mono: cannot read the identity: {e}"),
+    }
+    println!("  geometry fingerprint {hash:016x}  ({} modules)", rows.len());
     for (m, v) in &rows {
         println!("  {:<4} fx {:>9.1}  fy {:>9.1}  cx {:>8.1}  cy {:>8.1}", m, v[0], v[1], v[2], v[3]);
     }

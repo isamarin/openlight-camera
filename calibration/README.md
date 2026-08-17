@@ -77,9 +77,14 @@ USB у камеры медленный, 2–3 МБ/с: `hotpixel.rec` тянет
 
 ### Отпечаток: как потом узнать, чей это кадр
 
-В `.lri` **нет ни серийника, ни uuid** — кадр, отделённый от камеры, безымянен. Но
-заводская геометрия едет в каждом кадре, и она поштучная. `lri-mono --fingerprint` хэширует
-интринсики и даёт устойчивый идентификатор:
+Кадр **называет свою камеру**: в `LightHeader` лежат `device_unique_id_low` и
+`device_unique_id_high`, и их склейка в шестнадцатеричном виде — это ровно `uuid.txt`
+раздела `/lightcal`. Рядом — модель и версия прошивки. Так что связь кадра с набором
+калибровки записана прямо в файле.
+
+Вдобавок заводская геометрия едет в каждом кадре, и она поштучная, поэтому
+`lri-mono --fingerprint` печатает и то, и другое: uuid как заявление файла о себе и хэш
+интринсик как независимую проверку этого заявления.
 
 ```
 lri-mono L16_00087.lri --fingerprint     # 70a9606d58c6035a
@@ -140,11 +145,16 @@ overlap at exactly the rate chance predicts (0.19 % against 0.16 % expected, cor
 0.001) — each of the 32 sensors has its own twenty thousand bad pixels and there is nobody
 to borrow them from. There is no generic "L16 calibration" and there never can be.
 
-A frame does not name its camera — there is no serial and no uuid in an `.lri`. But the
-factory geometry rides along in every frame and it is per-unit, so a frame can be matched
-back to the camera that shot it. Our tool hashes the intrinsics; both archived frames landed
-on their own camera bit for bit, 160 px away from the other one. If you have orphaned `.lri`
-files, they can still be reunited with the right calibration set.
+A frame **does** name its camera: `LightHeader` carries `device_unique_id_low` and
+`device_unique_id_high`, and the two concatenated in hex are exactly the `uuid.txt` of that
+camera's `/lightcal` partition — verified character for character on two units. Model and
+firmware string sit next to it.
+
+The factory geometry rides along too, and it is per-unit, so the claim can be checked rather
+than trusted: our tool prints the uuid and, beside it, a hash of the intrinsics. Both
+archived frames landed on their own camera bit for bit, 160 px away from the other one. If
+you have orphaned `.lri` files, they can be reunited with the right calibration set — and
+the match can be verified independently of the label.
 
 If you can share yours, it makes a corpus that has never existed: whether the panchromatic
 modules always sit at A2 (28 mm) and C6 (150 mm), how many early units still carry the

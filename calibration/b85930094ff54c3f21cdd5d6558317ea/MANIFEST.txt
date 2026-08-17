@@ -5,25 +5,25 @@ Light L16 — заводская калибровка, снятая с каме�
 прошивка    00WW_1_341
 uuid        b85930094ff54c3f21cdd5d6558317ea
 отпечаток   e5a5953258216cd3
-снято       2026-08-17T18:17:02Z
+снято       2026-08-17T19:00:32Z
 
-Отпечаток — хэш заводской геометрии. Та же геометрия едет в каждом .lri,
-а серийника в кадре нет вовсе, так что отпечаток — единственный способ
-потом узнать, каким аппаратом снят кадр из архива:
+Кадр из архива называет свою камеру сам: uuid лежит в LightHeader и совпадает
+с uuid.txt этого набора. Отпечаток — хэш заводской геометрии, независимая
+проверка того, что набор действительно принадлежит камере:
     lri-mono кадр.lri --fingerprint
 
 Файлы (суммы — в SHA256SUMS):
-  calibration.lri            333048 Б
-  calibration.lri.md5        50 Б
-  colorcalibmirrorhall.json  2647 Б
-  colorcamparams.rec         35298 Б
-  colorshopfloor.txt         7723 Б
-  crosstalkcamparams.rec     263001 Б
-  crosstalkshopfloor.txt     6737 Б
-  fcat2_internal_analysis.txt 4 Б
-  flash.json                 628 Б
-  hotpixel.rec               29101039 Б
-  hotpixel.rec.md5           47 Б
-  uuid.txt                   32 Б
-  zoom_calib_v0.lri          6233 Б
-  zoom_calib_v0.lri.md5      52 Б
+  calibration.lri                333048 Б
+  calibration.lri.md5            50 Б
+  colorcalibmirrorhall.json      2647 Б
+  colorcamparams.rec             35298 Б
+  colorshopfloor.txt             7723 Б
+  crosstalkcamparams.rec         263001 Б
+  crosstalkshopfloor.txt         6737 Б
+  fcat2_internal_analysis.txt    4 Б
+  flash.json                     628 Б
+  hotpixel.rec                   29101039 Б
+  hotpixel.rec.md5               47 Б
+  uuid.txt                       32 Б
+  zoom_calib_v0.lri              6233 Б
+  zoom_calib_v0.lri.md5          52 Б
