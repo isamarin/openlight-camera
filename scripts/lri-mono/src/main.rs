@@ -261,7 +261,7 @@ fn run_peek(args: &Args, cam: &str) -> ExitCode {
     println!("{}: {} modules, {:.0} MB", source.name(), planes.len(), walked as f64 / 1.0e6);
     for p in &planes {
         println!(
-            "  {:<3} {}x{}  cfa {:<5}  exposure {:>9.3} ms  gain {:.2}x  {}°  plane {:.1} MB at {}",
+            "  {:<3} {}x{}  cfa {:<5}  exposure {:>9.3} ms  gain {:.2}x  {}°  mirror {:>4}  plane {:.1} MB at {}",
             p.camera,
             p.width,
             p.height,
@@ -269,6 +269,7 @@ fn run_peek(args: &Args, cam: &str) -> ExitCode {
             p.exposure_ns as f64 / 1.0e6,
             p.analog_gain,
             p.temperature,
+            p.mirror_position,
             p.length as f64 / 1.0e6,
             p.offset
         );
