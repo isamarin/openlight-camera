@@ -253,3 +253,131 @@ pub fn unpack_tenbit(packed: &[u8], count: usize) -> Vec<u16> {
 
     out
 }
+
+/// What the factory measured for one module, as far as the geometry goes.
+pub struct ModuleCalibration {
+    pub camera: String,
+    pub mirror_type: String,
+    /// Focus bundles: each carries intrinsics for one focus distance.
+    pub focus_bundles: usize,
+    pub focus_distances: Vec<f32>,
+    /// The K matrix of the first bundle, row-major.
+    pub k_mat: Option<[f32; 9]>,
+    pub has_distortion: bool,
+    pub colour_profiles: usize,
+    pub has_vignetting: bool,
+    pub has_hot_pixels: bool,
+    /// Mirror geometry, present only for the modules that steer one.
+    pub mirror_angle_range: Option<(f32, f32)>,
+    pub hall_code_range: Option<(f32, f32)>,
+    pub actuator_pairs: usize,
+    pub quadratic_coeffs: Vec<f32>,
+    pub mirror_normal: Option<(f32, f32, f32)>,
+    pub rotation_axis: Option<(f32, f32, f32)>,
+    pub reprojection_error: Option<f32>,
+}
+
+/// Read the factory calibration out of a container — the `.lri` in `/lightcal`, or any
+/// shot, since every frame carries the same block. This is the geometry an open fusion
+/// needs: intrinsics per focus distance, distortion, and for eight of the modules the
+/// mirror model that says where the module is actually looking.
+pub fn read_calibration(src: &dyn Source) -> io::Result<Vec<ModuleCalibration>> {
+    let mut out = Vec::new();
+    let mut pos = 0u64;
+
+    loop {
+        let header = src.read_at(pos, HEADER_LEN)?;
+        if header.len() < HEADER_LEN as usize || &header[..4] != MAGIC {
+            break;
+        }
+        let block_length = u64::from_le_bytes(header[4..12].try_into().unwrap());
+        let message_offset = u64::from_le_bytes(header[12..20].try_into().unwrap());
+        let message_length = u32::from_le_bytes(header[20..24].try_into().unwrap()) as u64;
+        let kind = header[24];
+        if block_length == 0 {
+            break;
+        }
+
+        if kind == MSG_LIGHT_HEADER && message_length > 0 {
+            let msg = src.read_at(pos + message_offset, message_length)?;
+            if let Ok(light) = LightHeader::parse_from_bytes(&msg) {
+                for cal in light.module_calibration {
+                    let camera = format!("{:?}", cal.camera_id());
+                    let geometry = cal.geometry.as_ref();
+
+                    let mirror_type = geometry
+                        .map(|g| format!("{:?}", g.mirror_type()))
+                        .unwrap_or_else(|| "—".into());
+
+                    let bundles = geometry.map(|g| g.per_focus_calibration.len()).unwrap_or(0);
+                    let focus_distances = geometry
+                        .map(|g| {
+                            g.per_focus_calibration
+                                .iter()
+                                .map(|b| b.focus_distance())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    let k_mat = geometry.and_then(|g| {
+                        g.per_focus_calibration.first().and_then(|b| {
+                            b.intrinsics.as_ref().and_then(|i| {
+                                i.k_mat.as_ref().map(|m| {
+                                    [m.x00(), m.x01(), m.x02(),
+                                     m.x10(), m.x11(), m.x12(),
+                                     m.x20(), m.x21(), m.x22()]
+                                })
+                            })
+                        })
+                    });
+
+                    // The mirror model hides two levels down, inside the extrinsics —
+                    // and not necessarily in the first focus bundle, so look through all
+                    // of them and take the first that carries one.
+                    let movable = geometry.and_then(|g| {
+                        g.per_focus_calibration
+                            .iter()
+                            .filter_map(|b| b.extrinsics.as_ref())
+                            .filter_map(|e| e.moveable_mirror.as_ref())
+                            .next()
+                    });
+                    let system = movable.and_then(|m| m.mirror_system.as_ref());
+                    let mapping = movable.and_then(|m| m.mirror_actuator_mapping.as_ref());
+
+                    out.push(ModuleCalibration {
+                        camera,
+                        mirror_type,
+                        focus_bundles: bundles,
+                        focus_distances,
+                        k_mat,
+                        has_distortion: geometry.map(|g| g.distortion.is_some()).unwrap_or(false),
+                        colour_profiles: cal.color.len(),
+                        has_vignetting: cal.vignetting.is_some(),
+                        has_hot_pixels: cal.hot_pixel_map.is_some(),
+                        mirror_angle_range: system
+                            .and_then(|s| s.mirror_angle_range.as_ref())
+                            .map(|r| (r.min_val(), r.max_val())),
+                        hall_code_range: mapping
+                            .and_then(|m| m.hall_code_range.as_ref())
+                            .map(|r| (r.min_val(), r.max_val())),
+                        actuator_pairs: mapping.map(|m| m.actuator_angle_pair_vec.len()).unwrap_or(0),
+                        quadratic_coeffs: mapping
+                            .and_then(|m| m.quadratic_model.as_ref())
+                            .map(|q| q.model_coeffs.clone())
+                            .unwrap_or_default(),
+                        mirror_normal: system
+                            .and_then(|s| s.mirror_normal_at_zero_degrees.as_ref())
+                            .map(|p| (p.x(), p.y(), p.z())),
+                        rotation_axis: system
+                            .and_then(|s| s.rotation_axis.as_ref())
+                            .map(|p| (p.x(), p.y(), p.z())),
+                        reprojection_error: system.and_then(|s| s.reprojection_error),
+                    });
+                }
+            }
+        }
+        pos += block_length;
+    }
+
+    Ok(out)
+}

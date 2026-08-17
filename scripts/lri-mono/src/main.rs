@@ -30,7 +30,7 @@ use std::process::ExitCode;
 use lri_rs::{LriFile, RawImage, SensorModel};
 
 mod container;
-use container::{AdbSource, LocalSource, ModulePlane, Source};
+use container::{AdbSource, LocalSource, ModuleCalibration, ModulePlane, Source};
 
 /// Sensor characterization as the container itself reports it. Camera2 metadata
 /// on the device says 64/1023 for the logical camera; the container wins here
@@ -84,6 +84,7 @@ struct Args {
     stretch: bool,
     stats: bool,
     census: bool,
+    calib: bool,
     peek: Option<String>,
     device: Option<String>,
 }
@@ -101,6 +102,7 @@ lri-mono <file.lri> [options]
   --stretch          scale to the 99.9th percentile instead of the white level
   --stats            per-module numbers, including the CFA phase test
   --census           one line per module: sensor, mosaic, light collected, colour profile
+  --calib            dump the factory calibration: geometry, mirrors, per module
   --peek CAM         read only that module's plane instead of the whole file
   --device PATH      peek at a file on the camera over adb, e.g.
                      --peek A2 --device /sdcard/DCIM/Camera/L16_00145.lri
@@ -118,6 +120,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if args.calib {
+        return run_calib(&args);
+    }
 
     if let Some(cam) = args.peek.clone() {
         return run_peek(&args, &cam);
@@ -358,6 +364,94 @@ fn run_peek(args: &Args, cam: &str) -> ExitCode {
         plane.length as f64 / 1.0e6,
         walked as f64 / 1.0e6
     );
+    ExitCode::SUCCESS
+}
+
+/// Print what the factory measured, module by module.
+///
+/// Works on `/lightcal/calibration.lri` and on any ordinary shot — every frame carries
+/// the same block. Eight of the sixteen modules steer a mirror, and for those the model
+/// that says where the module is actually pointing lives here: rotation axis, mirror
+/// normal, and the mapping from the Hall reading to an angle.
+fn run_calib(args: &Args) -> ExitCode {
+    let source: Box<dyn Source> = match &args.device {
+        Some(path) => Box::new(AdbSource::new(path.clone())),
+        None => Box::new(LocalSource::new(args.input.to_string_lossy().into_owned())),
+    };
+
+    let cals = match container::read_calibration(source.as_ref()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("lri-mono: cannot read {}: {e}", source.name());
+            return ExitCode::FAILURE;
+        }
+    };
+    if cals.is_empty() {
+        eprintln!("lri-mono: no factory calibration in {}", source.name());
+        return ExitCode::FAILURE;
+    }
+
+    // The same module is described in several blocks; report each one once, keeping
+    // the entry that actually carries the mirror model.
+    let mut seen: Vec<&ModuleCalibration> = Vec::new();
+    for c in &cals {
+        match seen.iter().position(|s| s.camera == c.camera) {
+            Some(i) => {
+                if seen[i].mirror_angle_range.is_none() && c.mirror_angle_range.is_some() {
+                    seen[i] = c;
+                }
+            }
+            None => seen.push(c),
+        }
+    }
+
+    println!(
+        "{}: calibration for {} modules ({} entries in the file)",
+        source.name(),
+        seen.len(),
+        cals.len()
+    );
+    for c in seen {
+        println!(
+            "\n  {:<3} mirror {:<8} focus bundles {:<2} colour {} {}{}",
+            c.camera,
+            c.mirror_type,
+            c.focus_bundles,
+            c.colour_profiles,
+            if c.has_vignetting { "vignetting " } else { "" },
+            if c.has_hot_pixels { "hot-pixels" } else { "" }
+        );
+        if !c.focus_distances.is_empty() {
+            let d: Vec<String> = c.focus_distances.iter().map(|f| format!("{f:.2}")).collect();
+            println!("      focus distances  {}", d.join(" "));
+        }
+        if let Some(k) = c.k_mat {
+            println!(
+                "      intrinsics       fx {:.1}  fy {:.1}  cx {:.1}  cy {:.1}{}",
+                k[0], k[4], k[2], k[5],
+                if c.has_distortion { "  + distortion" } else { "" }
+            );
+        }
+        if let Some((lo, hi)) = c.mirror_angle_range {
+            println!("      mirror angles    {lo:.2}° … {hi:.2}°");
+        }
+        if let Some((lo, hi)) = c.hall_code_range {
+            println!("      hall codes       {lo:.0} … {hi:.0}   pairs {}", c.actuator_pairs);
+        }
+        if let Some((x, y, z)) = c.rotation_axis {
+            println!("      rotation axis    ({x:.4}, {y:.4}, {z:.4})");
+        }
+        if let Some((x, y, z)) = c.mirror_normal {
+            println!("      mirror normal    ({x:.4}, {y:.4}, {z:.4})");
+        }
+        if !c.quadratic_coeffs.is_empty() {
+            let q: Vec<String> = c.quadratic_coeffs.iter().map(|f| format!("{f:.6}")).collect();
+            println!("      quadratic model  {}", q.join(" "));
+        }
+        if let Some(e) = c.reprojection_error {
+            println!("      reprojection     {e:.4}");
+        }
+    }
     ExitCode::SUCCESS
 }
 
@@ -681,6 +775,7 @@ fn parse_args() -> Result<Option<Args>, String> {
     let mut stretch = false;
     let mut stats = false;
     let mut census = false;
+    let mut calib = false;
     let mut peek = None;
     let mut device = None;
 
@@ -724,6 +819,7 @@ fn parse_args() -> Result<Option<Args>, String> {
             "--stretch" => stretch = true,
             "--stats" => stats = true,
             "--census" => census = true,
+            "--calib" => calib = true,
             "--peek" => peek = Some(need(&mut argv, "--peek")?),
             "--device" => device = Some(need(&mut argv, "--device")?),
             other if other.starts_with('-') => return Err(format!("unknown option '{other}'")),
@@ -745,7 +841,7 @@ fn parse_args() -> Result<Option<Args>, String> {
     });
 
     Ok(Some(Args {
-        input, out, methods, modules, black, white, linear, stretch, stats, census, peek, device,
+        input, out, methods, modules, black, white, linear, stretch, stats, census, calib, peek, device,
     }))
 }
 
